@@ -52,17 +52,26 @@ const ITEM_POOL = ["hammer", "claw", "vape", "tarot"];
 let matchSequence = 0;
 
 function randomInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  const range = max - min + 1;
+  if (globalThis.crypto?.getRandomValues) {
+    const limit = Math.floor(0x1_0000_0000 / range) * range;
+    const sample = new Uint32Array(1);
+    do {
+      globalThis.crypto.getRandomValues(sample);
+    } while (sample[0] >= limit);
+    return min + (sample[0] % range);
+  }
+  return Math.floor(Math.random() * range) + min;
 }
 
 function pick(list) {
-  return list[Math.floor(Math.random() * list.length)];
+  return list[randomInt(0, list.length - 1)];
 }
 
 function shuffle(list) {
   const copy = [...list];
   for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(0, i);
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
@@ -183,6 +192,7 @@ export class RouletteGame {
   touch(event = null) {
     this.state.revision += 1;
     this.state.shellCounts = countShells(this.state.shells);
+    if (event && typeof event === "object") event.revision = this.state.revision;
     this.state.lastEvent = event;
   }
 
@@ -198,7 +208,8 @@ export class RouletteGame {
     }
 
     const { live, blank } = this.state.shellCounts;
-    this.pushLog(`Раунд ${this.state.roundNumber}: боевые ${live}, пустые ${blank}. Заряды перемешаны вслепую.`);
+    const message = `Раунд ${this.state.roundNumber}: боевые ${live}, пустые ${blank}. Заряды перемешаны вслепую.`;
+    this.pushLog(message);
 
     if (!preserveTurn || !this.activePlayer || this.activePlayer.out) {
       const firstAlive = this.alivePlayers()[0];
@@ -210,6 +221,7 @@ export class RouletteGame {
       live,
       blank,
       weaponSkin: this.state.weaponSkin,
+      message,
     });
   }
 
@@ -349,8 +361,7 @@ export class RouletteGame {
     if (itemId === "tarot") {
       this.state.peekedShell = this.state.shells[0] ?? null;
       this.state.peekedBy = actor.id;
-      const label = this.state.peekedShell === "live" ? "боевой" : "пустой";
-      this.pushLog(`${actionOf(actor, "смотрит", "смотришь")} карту таро: следующий заряд ${label}.`);
+      this.pushLog(`${actionOf(actor, "смотрит", "смотришь")} карту таро.`);
       this.touch({ type: "item", itemId, actorId: actor.id, targetId: actor.id, peekedShell: this.state.peekedShell });
       return { ok: true };
     }
@@ -411,6 +422,7 @@ export class RouletteGame {
       weaponSkin: this.state.weaponSkin,
       selfShot,
       eliminated,
+      message: this.state.log[0],
     };
     this.touch(event);
 
@@ -422,6 +434,9 @@ export class RouletteGame {
     }
 
     this.resolveTurnAfterAction({ repeatTurn });
+    if (this.state.lastEvent?.type === "round-start") {
+      event.nextRound = { ...this.state.lastEvent };
+    }
     this.state.lastEvent = event;
     return { ok: true };
   }

@@ -104,3 +104,13 @@ test("rounds, items, losses and active time are persisted", () => {
   assert.equal(value.losses, 1);
   assert.equal(value.currentStreak, 0);
 });
+
+test("online player events use the local seat and ignore duplicate revisions", () => {
+  const stats = tracker();
+  const event = { type: "item", actorId: "p1", itemId: "hammer" };
+
+  assert.equal(stats.recordEvent(event, { playerId: "p1", eventId: "match-1:7" }), true);
+  assert.equal(stats.recordEvent(event, { playerId: "p1", eventId: "match-1:7" }), false);
+  assert.equal(stats.snapshot().itemsUsed, 1);
+  assert.equal(stats.snapshot().itemUses.hammer, 1);
+});

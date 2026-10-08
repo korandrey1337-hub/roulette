@@ -1,14 +1,23 @@
-import { ITEM_DEFS, RouletteGame, WEAPON_SKINS } from "./game.js?v=20260920-4";
-import { ROULETTE_STATS_KEY, RouletteStats } from "./stats.js?v=20260921-1";
+import { ITEM_DEFS, RouletteGame, WEAPON_SKINS } from "./game.js?v=20261006-2";
+import { OnlineClient } from "./online.js?v=20261006-2";
+import { ROULETTE_STATS_KEY, RouletteStats } from "./stats.js?v=20261006-2";
 
 const canvas = document.querySelector("#club-scene");
 const ctx = canvas.getContext("2d", { alpha: false });
 const backdropCanvas = document.createElement("canvas");
 const backdropCtx = backdropCanvas.getContext("2d");
 
-const playerCountSelect = document.querySelector("#player-count");
-const weaponSkinSelect = document.querySelector("#weapon-skin");
 const newGameButton = document.querySelector("#new-game");
+const currentModeLabelEl = document.querySelector("#current-mode-label");
+const modePanelEl = document.querySelector("#mode-panel");
+const modeBackdropEl = document.querySelector("#mode-backdrop");
+const modeCloseButton = document.querySelector("#mode-close");
+const modeCancelButton = document.querySelector("#mode-cancel");
+const modeConfirmButton = document.querySelector("#mode-confirm");
+const modeKickerEl = document.querySelector("#mode-kicker");
+const modeTitleEl = document.querySelector("#mode-title");
+const modeNoteEl = document.querySelector("#mode-note");
+const modeCards = [...document.querySelectorAll(".mode-card")];
 const playersEl = document.querySelector("#players");
 const roundCardEl = document.querySelector("#round-card");
 const turnTitleEl = document.querySelector("#turn-title");
@@ -31,6 +40,27 @@ const tutorialNextButton = document.querySelector("#tutorial-next");
 const statsOpenButton = document.querySelector("#stats-open");
 const musicToggleButton = document.querySelector("#music-toggle");
 const backgroundMusic = document.querySelector("#background-music");
+const onlineOpenButton = document.querySelector("#online-open");
+const onlinePanelEl = document.querySelector("#online-panel");
+const onlineBackdropEl = document.querySelector("#online-backdrop");
+const onlineCloseButton = document.querySelector("#online-close");
+const onlineEntryEl = document.querySelector("#online-entry");
+const onlineRoomEl = document.querySelector("#online-room");
+const onlineNameInput = document.querySelector("#online-name");
+const onlineCodeInput = document.querySelector("#online-code-input");
+const onlineCreateButton = document.querySelector("#online-create");
+const onlineJoinButton = document.querySelector("#online-join");
+const onlineCopyCodeButton = document.querySelector("#online-copy-code");
+const onlineStatusEl = document.querySelector("#online-status");
+const onlinePlayersEl = document.querySelector("#online-players");
+const onlineModeNameEl = document.querySelector("#online-mode-name");
+const onlineModeRulesEl = document.querySelector("#online-mode-rules");
+const onlineModeEditButton = document.querySelector("#online-mode-edit");
+const onlineHintEl = document.querySelector("#online-hint");
+const onlineReadyButton = document.querySelector("#online-ready");
+const onlineStartButton = document.querySelector("#online-start");
+const onlineLeaveButton = document.querySelector("#online-leave");
+const onlineErrorEl = document.querySelector("#online-error");
 const statsPanelEl = document.querySelector("#stats-panel");
 const statsBackdropEl = document.querySelector("#stats-backdrop");
 const statsSummaryEl = document.querySelector("#stats-summary");
@@ -45,6 +75,7 @@ const resultTitleEl = document.querySelector("#result-title");
 const resultSubtitleEl = document.querySelector("#result-subtitle");
 const resultMetricsEl = document.querySelector("#result-metrics");
 const resultStatsButton = document.querySelector("#result-stats");
+const resultModeButton = document.querySelector("#result-mode");
 const resultReplayButton = document.querySelector("#result-replay");
 const topbarEl = document.querySelector(".topbar");
 const scoreboardEl = document.querySelector(".scoreboard");
@@ -52,26 +83,28 @@ const commandDeckEl = document.querySelector(".command-deck");
 const appShellEl = document.querySelector(".app-shell");
 
 const game = new RouletteGame({ playerCount: 2, weaponSkin: "revolver" });
+const onlineClient = new OnlineClient();
 const qaMode = new URLSearchParams(window.location.search).has("qa");
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const rouletteStats = new RouletteStats({ key: qaMode ? `${ROULETTE_STATS_KEY}:qa` : ROULETTE_STATS_KEY });
 rouletteStats.startSession({ telegram: Boolean(window.Telegram?.WebApp) });
 rouletteStats.recordMatchStart(game.state);
 
 const ART = {
-  background: "./assets/art/club-background-board.png",
-  p0: "./assets/art/player-teal.png",
-  p0Victory: "./assets/art/player-teal-victory.png",
-  p1: "./assets/art/player-red.png",
-  p2: "./assets/art/player-yellow.png",
-  p3: "./assets/art/player-green.png",
-  hammer: "./assets/art/item-hammer.png",
-  claw: "./assets/art/item-claw.png",
-  vape: "./assets/art/item-vape.png",
-  tarot: "./assets/art/item-tarot.png",
-  live: "./assets/art/charge-live.png",
-  blank: "./assets/art/charge-blank.png",
-  revolver: "./assets/art/weapon-revolver.png",
-  shotgun: "./assets/art/weapon-shotgun.png",
+  background: "./assets/art/club-background-board.webp",
+  p0: "./assets/art/player-teal.webp",
+  p0Victory: "./assets/art/player-teal-victory.webp",
+  p1: "./assets/art/player-red.webp",
+  p2: "./assets/art/player-yellow.webp",
+  p3: "./assets/art/player-green.webp",
+  hammer: "./assets/art/item-hammer.webp",
+  claw: "./assets/art/item-claw.webp",
+  vape: "./assets/art/item-vape.webp",
+  tarot: "./assets/art/item-tarot.webp",
+  live: "./assets/art/charge-live.webp",
+  blank: "./assets/art/charge-blank.webp",
+  revolver: "./assets/art/weapon-revolver.webp",
+  shotgun: "./assets/art/weapon-shotgun.webp",
 };
 
 const BG_SIZE = { width: 1672, height: 941 };
@@ -82,6 +115,7 @@ const ROUND_REVEAL_MS = 1250;
 const ROUND_LOAD_MS = 1250;
 const ROUND_SETTLE_MS = 200;
 const ROUND_INTRO_MS = ROUND_REVEAL_MS + ROUND_LOAD_MS + ROUND_SETTLE_MS;
+const MATCH_CINEMATIC_MS = 5000;
 const RESULT_REVEAL_MS = SHOT_AIM_MS + SHOT_FLIGHT_MS + 900;
 const LEADERBOARD_KEY = "rouletteClubLeaderboard:v1";
 const MUSIC_MUTED_KEY = "rouletteClubMusicMuted:v1";
@@ -92,6 +126,36 @@ const LEADERBOARD_PLAYERS = [
   { id: "p2", name: "Бетонный Джим" },
   { id: "p3", name: "Смузи-Бригадир" },
 ];
+const GAME_MODES = [
+  {
+    id: "duel-classic",
+    title: "Классическая дуэль",
+    shortTitle: "Дуэль · Револьвер",
+    playerCount: 2,
+    weaponSkin: "revolver",
+  },
+  {
+    id: "duel-blitz",
+    title: "Блиц-дуэль",
+    shortTitle: "Дуэль · Дробовик",
+    playerCount: 2,
+    weaponSkin: "shotgun",
+  },
+  {
+    id: "club-classic",
+    title: "Клубный стол",
+    shortTitle: "4 игрока · Револьвер",
+    playerCount: 4,
+    weaponSkin: "revolver",
+  },
+  {
+    id: "club-chaos",
+    title: "Полный хаос",
+    shortTitle: "4 игрока · Дробовик",
+    playerCount: 4,
+    weaponSkin: "shotgun",
+  },
+];
 const CHARACTER_KEYS = ["p0", "p1", "p2", "p3"];
 const images = {};
 const particles = [];
@@ -99,6 +163,10 @@ const visualBursts = [];
 const playerAnims = new Map();
 
 let pendingItem = null;
+let selectedGameModeId = "duel-classic";
+let modeDraftId = selectedGameModeId;
+let modePanelContext = "local";
+let modeReturnFocusEl = newGameButton;
 let botTimer = null;
 let lastAnimatedRevision = -1;
 let audioCtx = null;
@@ -121,6 +189,17 @@ let resultRevealTimer = null;
 let resultSoundMatchId = null;
 let musicUnlocked = false;
 let musicMuted = localStorage.getItem(MUSIC_MUTED_KEY) === "1";
+let onlineRoom = null;
+let onlineMode = false;
+let onlineStatus = "offline";
+let onlineActionPending = false;
+let lastOnlineAward = null;
+let drawFrameId = null;
+let lastDrawAt = 0;
+let resizeFrameId = null;
+let hudSceneBoundsCache = null;
+let animationGeneration = 0;
+let toastGeneration = 0;
 
 const impact = {
   startedAt: 0,
@@ -137,6 +216,13 @@ const roundIntro = {
   weaponSkin: "revolver",
   event: null,
   message: "",
+  sequence: 0,
+};
+
+const matchCinematic = {
+  active: false,
+  pending: false,
+  startedAt: 0,
   sequence: 0,
 };
 
@@ -187,23 +273,34 @@ const tableSlots = {
   charges: { x: 620, y: 528 },
 };
 
-Promise.all(
-  Object.entries(ART).map(([key, src]) =>
+Promise.allSettled(
+  Object.entries(ART).filter(([key]) => key !== "p0Victory").map(([key, src]) =>
     loadImage(src).then((image) => {
       images[key] = image;
     }),
   ),
 ).then(() => {
   resizeCanvas();
+  renderModeButton();
   if (!hasSeenTutorial() && !qaMode) {
     openTutorial(0);
   }
+  prepareMatchCinematic();
   syncAll();
-  requestAnimationFrame(draw);
+  startDrawLoop();
 });
 
 newGameButton.addEventListener("click", () => {
-  startNewMatch();
+  if (onlineRoom) openOnlinePanel();
+  else openModePanel("local");
+});
+
+modeBackdropEl.addEventListener("click", closeModePanel);
+modeCloseButton.addEventListener("click", closeModePanel);
+modeCancelButton.addEventListener("click", closeModePanel);
+modeConfirmButton.addEventListener("click", confirmModeSelection);
+modeCards.forEach((card) => {
+  card.addEventListener("click", () => selectModeDraft(card.dataset.mode));
 });
 
 tutorialOpenButton.addEventListener("click", () => {
@@ -212,11 +309,41 @@ tutorialOpenButton.addEventListener("click", () => {
 
 statsOpenButton.addEventListener("click", openStatsPanel);
 musicToggleButton.addEventListener("click", toggleBackgroundMusic);
+onlineOpenButton.addEventListener("click", openOnlinePanel);
+onlineCloseButton.addEventListener("click", closeOnlinePanel);
+onlineBackdropEl.addEventListener("click", closeOnlinePanel);
+onlineCreateButton.addEventListener("click", () => joinOnlineRoom(true));
+onlineJoinButton.addEventListener("click", () => joinOnlineRoom(false));
+onlineCopyCodeButton.addEventListener("click", copyOnlineRoomCode);
+onlineReadyButton.addEventListener("click", toggleOnlineReady);
+onlineStartButton.addEventListener("click", () => {
+  onlineClient.send({ type: onlineRoom?.phase === "finished" ? "rematch" : "start" });
+});
+onlineLeaveButton.addEventListener("click", leaveOnlineRoom);
+onlineModeEditButton.addEventListener("click", () => openModePanel("online"));
+onlineCodeInput.addEventListener("input", () => {
+  onlineCodeInput.value = onlineCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+});
+onlineClient.addEventListener("state", (event) => applyOnlineRoom(event.detail));
+onlineClient.addEventListener("status", (event) => {
+  onlineStatus = event.detail.status;
+  renderOnlinePanel();
+});
+onlineClient.addEventListener("error", (event) => {
+  onlineActionPending = false;
+  showOnlineError(event.detail.message);
+  if (onlineMode) showEventToast(event.detail.message, "warning");
+  renderOnlinePanel();
+});
 statsCloseButton.addEventListener("click", closeStatsPanel);
 statsCloseIconButton.addEventListener("click", closeStatsPanel);
 statsBackdropEl.addEventListener("click", closeStatsPanel);
 resultReplayButton.addEventListener("click", startNewMatch);
 resultStatsButton.addEventListener("click", openStatsPanel);
+resultModeButton.addEventListener("click", () => {
+  if (onlineRoom) openOnlinePanel();
+  else openModePanel("local");
+});
 
 tutorialSkipButton.addEventListener("click", () => {
   closeTutorial();
@@ -230,31 +357,34 @@ tutorialNextButton.addEventListener("click", () => {
   openTutorial(tutorialIndex + 1);
 });
 
-playerCountSelect.addEventListener("change", () => {
-  startNewMatch();
-});
-
-weaponSkinSelect.addEventListener("change", () => {
-  startNewMatch();
-});
-
-window.addEventListener("resize", resizeCanvas);
-window.visualViewport?.addEventListener("resize", resizeCanvas);
+window.addEventListener("resize", scheduleResizeCanvas);
+window.visualViewport?.addEventListener("resize", scheduleResizeCanvas);
 screen.orientation?.addEventListener?.("change", () => window.setTimeout(applyTelegramViewport, 80));
 window.addEventListener("pointerdown", unlockAudio, { passive: true });
 window.addEventListener("keydown", unlockAudio);
 window.addEventListener("pointerdown", requestTelegramFullscreen, { passive: true });
 window.addEventListener("keydown", requestTelegramFullscreen);
 window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !statsPanelEl.hidden) closeStatsPanel();
+  const modal = activeModalPanel();
+  if (event.key === "Tab" && modal) {
+    trapModalFocus(event, modal);
+    return;
+  }
+  if (event.key !== "Escape") return;
+  if (!modePanelEl.hidden) closeModePanel();
+  else if (!onlinePanelEl.hidden) closeOnlinePanel();
+  else if (!statsPanelEl.hidden) closeStatsPanel();
+  else if (!tutorialEl.hidden) closeTutorial();
 });
 window.addEventListener("pagehide", flushActiveStats);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
+    stopDrawLoop();
     flushActiveStats();
     activeStatsSince = null;
     backgroundMusic.pause();
   } else {
+    startDrawLoop();
     activeStatsSince = performance.now();
     if (musicUnlocked && !musicMuted) startBackgroundMusic();
   }
@@ -275,14 +405,26 @@ canvas.addEventListener("pointerup", (event) => {
   const distance = Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y);
   pointerDown = null;
   if (distance < 14) {
+    if (matchCinematic.active) {
+      finishMatchCinematic();
+      return;
+    }
     handleSceneClick(event.clientX, event.clientY);
   }
 });
 
 initTelegramWebApp();
+onlineNameInput.value = defaultOnlineName();
+const invitedRoomCode = new URLSearchParams(window.location.search).get("room");
+if (invitedRoomCode) {
+  onlineCodeInput.value = invitedRoomCode.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
+  openOnlinePanel();
+}
 
 function initTelegramWebApp() {
-  telegramWebApp = window.Telegram?.WebApp ?? null;
+  const candidate = window.Telegram?.WebApp ?? null;
+  const hasTelegramLaunchData = Boolean(candidate?.initData || candidate?.initDataUnsafe?.user);
+  telegramWebApp = hasTelegramLaunchData ? candidate : null;
   if (!telegramWebApp) {
     setAppHeight(window.innerHeight);
     return;
@@ -308,6 +450,12 @@ function initTelegramWebApp() {
   telegramWebApp.onEvent?.("safeAreaChanged", applyTelegramViewport);
   telegramWebApp.onEvent?.("contentSafeAreaChanged", applyTelegramViewport);
   window.setTimeout(requestTelegramFullscreen, 120);
+}
+
+function defaultOnlineName() {
+  const telegramUser = telegramWebApp?.initDataUnsafe?.user;
+  const telegramName = [telegramUser?.first_name, telegramUser?.last_name].filter(Boolean).join(" ");
+  return onlineClient.savedName() || telegramName || telegramUser?.username || "Игрок";
 }
 
 function applyTelegramViewport() {
@@ -370,13 +518,323 @@ function loadImage(src) {
   });
 }
 
+function getGameMode(modeId = selectedGameModeId) {
+  return GAME_MODES.find((mode) => mode.id === modeId) ?? GAME_MODES[0];
+}
+
+function findGameMode(playerCount, weaponSkin) {
+  return GAME_MODES.find((mode) => mode.playerCount === Number(playerCount) && mode.weaponSkin === weaponSkin)
+    ?? GAME_MODES[0];
+}
+
+function openModePanel(context = "local") {
+  if (context === "online" && (!onlineRoom?.isHost || onlineRoom.phase !== "lobby")) return;
+  modePanelContext = context;
+  if (document.activeElement instanceof HTMLElement) modeReturnFocusEl = document.activeElement;
+  const sourceMode = context === "online"
+    ? findGameMode(onlineRoom.playerCount, onlineRoom.weaponSkin)
+    : getGameMode();
+  modeDraftId = sourceMode.id;
+  modeKickerEl.textContent = context === "online" ? `комната ${onlineRoom.code}` : "новый матч";
+  modeTitleEl.textContent = context === "online" ? "Режим комнаты" : "Выбери режим";
+  modeNoteEl.textContent = context === "online"
+    ? "Режим задаёт хост. После смены игроки подтверждают готовность заново."
+    : "В одиночной игре остальные места займут соперники.";
+  modeConfirmButton.textContent = context === "online" ? "Сохранить режим" : "Начать матч";
+  renderModePanel();
+  modePanelEl.hidden = false;
+  modeCards.find((card) => card.dataset.mode === modeDraftId)?.focus({ preventScroll: true });
+}
+
+function closeModePanel({ restoreFocus = true } = {}) {
+  if (modePanelEl.hidden) return;
+  modePanelEl.hidden = true;
+  if (!restoreFocus) return;
+  const fallback = modeReturnFocusEl?.offsetParent !== null
+    ? modeReturnFocusEl
+    : modePanelContext === "online" ? onlineModeEditButton : newGameButton;
+  if (fallback?.offsetParent !== null) fallback.focus({ preventScroll: true });
+}
+
+function selectModeDraft(modeId) {
+  if (!GAME_MODES.some((mode) => mode.id === modeId)) return;
+  modeDraftId = modeId;
+  renderModePanel();
+}
+
+function renderModePanel() {
+  modeCards.forEach((card) => {
+    const selected = card.dataset.mode === modeDraftId;
+    card.classList.toggle("is-selected", selected);
+    card.setAttribute("aria-checked", String(selected));
+  });
+}
+
+function confirmModeSelection() {
+  const mode = getGameMode(modeDraftId);
+  if (modePanelContext === "online") {
+    configureOnlineRoom(mode);
+    closeModePanel({ restoreFocus: false });
+    onlineReadyButton.focus({ preventScroll: true });
+    return;
+  }
+  selectedGameModeId = mode.id;
+  renderModeButton();
+  closeModePanel({ restoreFocus: false });
+  startNewMatch();
+}
+
+function renderModeButton() {
+  const mode = getGameMode();
+  currentModeLabelEl.textContent = mode.shortTitle;
+  newGameButton.setAttribute("aria-label", onlineRoom
+    ? `${mode.title}. Открыть онлайн-комнату`
+    : `${mode.title}. Выбрать другой режим`);
+  newGameButton.title = onlineRoom ? "Открыть онлайн-комнату" : "Выбрать режим";
+}
+
+function modeRulesText(mode) {
+  const weapon = WEAPON_SKINS[mode.weaponSkin];
+  const weaponName = weapon.name.replace(/^Проп-/i, "").toLowerCase();
+  return `${mode.playerCount} игрока · ${weaponName} · ${weapon.damage} ${weapon.damage === 1 ? "урон" : "урона"}`;
+}
+
+function openOnlinePanel() {
+  clearOnlineError();
+  renderOnlinePanel();
+  onlinePanelEl.hidden = false;
+  if (onlineRoom) onlineReadyButton.focus({ preventScroll: true });
+  else onlineNameInput.focus({ preventScroll: true });
+}
+
+function closeOnlinePanel() {
+  onlinePanelEl.hidden = true;
+  onlineOpenButton.focus({ preventScroll: true });
+}
+
+function joinOnlineRoom(create) {
+  clearOnlineError();
+  const roomCode = onlineCodeInput.value.trim().toUpperCase();
+  if (!create && roomCode.length !== 5) {
+    showOnlineError("Введи пятизначный код комнаты");
+    return;
+  }
+  onlineStatus = "connecting";
+  const mode = getGameMode();
+  onlineClient.join({
+    name: onlineNameInput.value,
+    roomCode: create ? "" : roomCode,
+    create,
+    playerCount: mode.playerCount,
+    weaponSkin: mode.weaponSkin,
+  });
+  renderOnlinePanel();
+}
+
+function applyOnlineRoom(room) {
+  const previousMatchId = onlineRoom?.game?.matchId;
+  onlineRoom = room;
+  onlineStatus = "connected";
+  onlineActionPending = false;
+  clearOnlineError();
+  updateOnlineInviteUrl(room.code);
+
+  selectedGameModeId = findGameMode(room.playerCount, room.weaponSkin).id;
+
+  if (room.game) {
+    const newMatch = previousMatchId !== room.game.matchId;
+    const startCinematic = newMatch && room.phase === "playing";
+    onlineMode = true;
+    clearTimeout(botTimer);
+    game.state = room.game;
+    if (newMatch) {
+      animationGeneration += 1;
+      pendingItem = null;
+      lastAnimatedRevision = -1;
+      lastOnlineAward = null;
+      resultPanelEl.hidden = true;
+      resultReplayButton.disabled = false;
+      resultReplayButton.textContent = "Реванш";
+      appShellEl.dataset.resultOpen = "false";
+      rouletteStats.recordMatchStart(game.state);
+      if (startCinematic) prepareMatchCinematic({ defer: true });
+    }
+    syncAll({ scheduleBots: false });
+    if (room.phase === "playing") {
+      closeOnlinePanel();
+      if (startCinematic) startMatchCinematicPlayback();
+    }
+  } else {
+    onlineMode = false;
+    pendingItem = null;
+    resultPanelEl.hidden = true;
+    appShellEl.dataset.resultOpen = "false";
+    openOnlinePanel();
+  }
+  renderOnlinePanel();
+}
+
+function renderOnlinePanel() {
+  const room = onlineRoom;
+  appShellEl.dataset.online = room ? "true" : "false";
+  onlineEntryEl.hidden = Boolean(room);
+  onlineRoomEl.hidden = !room;
+  onlineOpenButton.classList.toggle("is-connected", Boolean(room));
+  onlineOpenButton.textContent = room?.code || "Онлайн";
+  renderModeButton();
+
+  if (!room) {
+    onlineStatusEl.textContent = onlineStatusLabel();
+    return;
+  }
+
+  onlineCopyCodeButton.textContent = room.code;
+  onlineStatusEl.textContent = room.phase === "playing"
+    ? "Матч идёт"
+    : room.phase === "finished"
+      ? "Финал"
+      : `${room.players.length}/${room.playerCount} игроков`;
+
+  onlinePlayersEl.replaceChildren(...room.players.map((player) => {
+    const row = document.createElement("div");
+    row.className = "online-player";
+    if (player.isSelf) row.classList.add("is-self");
+    if (player.ready) row.classList.add("is-ready");
+    if (!player.connected) row.classList.add("is-offline");
+
+    const dot = document.createElement("span");
+    dot.className = "online-player-dot";
+    dot.style.color = player.color;
+    dot.style.background = player.color;
+    const name = document.createElement("span");
+    name.className = "online-player-name";
+    name.textContent = `${player.name}${player.isSelf ? " · ты" : ""}${player.isHost ? " · хост" : ""}`;
+    const state = document.createElement("span");
+    state.className = "online-player-state";
+    state.textContent = !player.connected ? "связь" : player.ready ? "готов" : "ждёт";
+    row.append(dot, name, state);
+    return row;
+  }));
+
+  const roomMode = findGameMode(room.playerCount, room.weaponSkin);
+  onlineModeNameEl.textContent = roomMode.title;
+  onlineModeRulesEl.textContent = modeRulesText(roomMode);
+  onlineModeEditButton.closest(".online-mode").dataset.weapon = roomMode.weaponSkin;
+  const configuring = room.phase === "lobby" && room.isHost;
+  onlineModeEditButton.hidden = !configuring;
+
+  const self = room.players.find((player) => player.isSelf);
+  onlineReadyButton.hidden = room.phase !== "lobby";
+  onlineReadyButton.textContent = self?.ready ? "Готов" : "Я готов";
+  onlineReadyButton.classList.toggle("is-ready", Boolean(self?.ready));
+  onlineStartButton.hidden = !room.isHost || !["lobby", "finished"].includes(room.phase);
+  onlineStartButton.textContent = room.phase === "finished" ? "Собрать реванш" : "Начать матч";
+  onlineStartButton.disabled = room.phase === "lobby" && !room.canStart;
+
+  if (onlineStatus === "reconnecting") {
+    onlineHintEl.textContent = "Связь потеряна. Возвращаем тебя в кресло...";
+  } else if (room.phase === "playing") {
+    onlineHintEl.textContent = "Матч уже идёт. Закрой окно и продолжай ход.";
+  } else if (room.phase === "finished") {
+    onlineHintEl.textContent = room.isHost ? "Хозяин стола может собрать реванш." : "Ждём, когда хозяин откроет реванш.";
+  } else if (room.players.length < room.playerCount) {
+    onlineHintEl.textContent = `Пригласи ещё ${room.playerCount - room.players.length}: отправь код комнаты.`;
+  } else if (!room.players.every((player) => player.ready)) {
+    onlineHintEl.textContent = "Все заняли места. Осталось подтвердить готовность.";
+  } else {
+    onlineHintEl.textContent = room.isHost ? "Стол собран. Можно начинать." : "Все готовы. Хозяин запускает матч.";
+  }
+}
+
+function configureOnlineRoom(mode) {
+  if (!onlineRoom?.isHost || onlineRoom.phase !== "lobby") return;
+  onlineClient.send({
+    type: "configure",
+    playerCount: mode.playerCount,
+    weaponSkin: mode.weaponSkin,
+  });
+}
+
+function toggleOnlineReady() {
+  const self = onlineRoom?.players.find((player) => player.isSelf);
+  if (!self || onlineRoom.phase !== "lobby") return;
+  onlineClient.send({ type: "ready", ready: !self.ready });
+}
+
+async function copyOnlineRoomCode() {
+  if (!onlineRoom?.code) return;
+  try {
+    await navigator.clipboard.writeText(onlineRoom.code);
+    onlineHintEl.textContent = "Код скопирован. Отправь его друзьям.";
+  } catch {
+    onlineHintEl.textContent = `Код комнаты: ${onlineRoom.code}`;
+  }
+}
+
+function leaveOnlineRoom() {
+  onlineClient.leave();
+  onlineRoom = null;
+  onlineMode = false;
+  onlineActionPending = false;
+  updateOnlineInviteUrl(null);
+  closeOnlinePanel();
+  startNewMatch();
+  renderOnlinePanel();
+}
+
+function updateOnlineInviteUrl(code) {
+  const url = new URL(window.location.href);
+  if (code) url.searchParams.set("room", code);
+  else url.searchParams.delete("room");
+  history.replaceState(null, "", url);
+}
+
+function showOnlineError(message) {
+  onlineErrorEl.hidden = false;
+  onlineErrorEl.textContent = message;
+}
+
+function clearOnlineError() {
+  onlineErrorEl.hidden = true;
+  onlineErrorEl.textContent = "";
+}
+
+function onlineStatusLabel() {
+  return {
+    connecting: "Подключение",
+    reconnecting: "Возвращаем связь",
+    connected: "На связи",
+    error: "Ошибка связи",
+  }[onlineStatus] || "Новый стол";
+}
+
+function getLocalPlayerId() {
+  return onlineMode ? onlineRoom?.selfId ?? onlineClient.playerId ?? "p0" : "p0";
+}
+
+function isLocalPlayer(player) {
+  return Boolean(player && player.id === getLocalPlayerId());
+}
+
 function startNewMatch() {
+  if (onlineRoom) {
+    if (onlineRoom.phase === "finished" && onlineRoom.isHost) {
+      onlineClient.send({ type: "rematch" });
+    } else {
+      openOnlinePanel();
+    }
+    return;
+  }
   pendingItem = null;
+  animationGeneration += 1;
+  toastGeneration += 1;
   actionLockedUntil = 0;
   clearTimeout(actionUnlockTimer);
   clearTimeout(resultRevealTimer);
   resultRevealTimer = null;
   resultPanelEl.hidden = true;
+  resultReplayButton.disabled = false;
+  resultReplayButton.textContent = "Реванш";
   appShellEl.dataset.resultOpen = "false";
   roundIntro.active = false;
   roundIntro.pending = false;
@@ -386,10 +844,11 @@ function startNewMatch() {
   playerAnims.clear();
   impact.event = null;
   game.newGame({
-    playerCount: Number(playerCountSelect.value),
-    weaponSkin: weaponSkinSelect.value,
+    playerCount: getGameMode().playerCount,
+    weaponSkin: getGameMode().weaponSkin,
   });
   rouletteStats.recordMatchStart(game.state);
+  prepareMatchCinematic();
   syncAll();
 }
 
@@ -399,12 +858,14 @@ function syncAll({ scheduleBots = true } = {}) {
   renderHud();
   resizeCanvas();
   queueAnimationForLastEvent();
-  if (scheduleBots) {
+  if (scheduleBots && !onlineMode) {
     scheduleBotTurn();
   }
 }
 
 function resizeCanvas() {
+  hudSceneBoundsCache = null;
+  if (!telegramWebApp) setAppHeight(window.innerHeight);
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   viewport = {
     width: window.innerWidth,
@@ -473,6 +934,14 @@ function resizeCanvas() {
   refreshBackdropCache();
 }
 
+function scheduleResizeCanvas() {
+  if (resizeFrameId !== null) return;
+  resizeFrameId = requestAnimationFrame(() => {
+    resizeFrameId = null;
+    resizeCanvas();
+  });
+}
+
 function refreshBackdropCache() {
   const image = images.background;
   if (!image || !backdropCtx) return;
@@ -513,35 +982,42 @@ function getLayoutMode() {
 }
 
 function getHudSceneBounds(mode = getLayoutMode()) {
+  if (hudSceneBoundsCache?.mode === mode) return hudSceneBoundsCache.bounds;
   const topbar = topbarEl?.getBoundingClientRect();
   const scoreboard = scoreboardEl?.getBoundingClientRect();
   const deck = commandDeckEl?.getBoundingClientRect();
   const inset = 8;
 
   if (mode === "portrait") {
-    return {
+    const bounds = {
       left: inset,
       right: viewport.width - inset,
       top: Math.min(viewport.height - 190, (scoreboard?.bottom ?? viewport.height * 0.24) + inset),
       bottom: Math.max(190, (deck?.top ?? viewport.height * 0.8) - inset),
     };
+    hudSceneBoundsCache = { mode, bounds };
+    return bounds;
   }
 
   if (mode === "landscape") {
-    return {
+    const bounds = {
       left: Math.min(viewport.width * 0.38, (scoreboard?.right ?? 0) + inset),
       right: viewport.width - inset,
       top: (topbar?.bottom ?? 54) + 5,
       bottom: Math.max(180, (deck?.top ?? viewport.height - 82) - 6),
     };
+    hudSceneBoundsCache = { mode, bounds };
+    return bounds;
   }
 
-  return {
+  const bounds = {
     left: inset,
     right: viewport.width - inset,
     top: (topbar?.bottom ?? 84) + inset,
     bottom: (deck?.top ?? viewport.height) - inset,
   };
+  hudSceneBoundsCache = { mode, bounds };
+  return bounds;
 }
 
 function getViewportHeight() {
@@ -575,7 +1051,7 @@ function renderHud() {
       const hpPercent = (player.hp / player.maxHp) * 100;
       card.innerHTML = `
         <div class="player-head">
-          <div class="player-name"><span class="player-dot" style="background:${player.color}"></span>${player.name}</div>
+          <div class="player-name"><span class="player-dot" style="background:${player.color}"></span>${player.name}${onlineMode && isLocalPlayer(player) ? " · ты" : ""}</div>
           <div class="player-meta">${player.out ? "вылетел" : `${player.hp}/${player.maxHp} HP`}</div>
         </div>
         <div class="hp-bar" aria-label="HP ${player.name}">
@@ -620,7 +1096,7 @@ function renderPeek(active) {
 
 function renderItems(active) {
   itemsEl.replaceChildren();
-  const locked = !active?.isHuman || game.state.winnerId || isShotInputLocked();
+  const locked = !active?.isHuman || game.state.winnerId || isShotInputLocked() || isOnlineActionLocked();
 
   if (!active || active.items.length === 0) {
     itemsEl.append(emptyNote(locked ? "ожидание" : "предметов нет"));
@@ -651,7 +1127,7 @@ function renderItems(active) {
         renderTurnHint(game.activePlayer);
         return;
       }
-      const result = game.useItem(itemId);
+      const result = usePlayerItem(itemId);
       if (!result.ok) {
         showEventToast(result.error, "warning");
         return;
@@ -673,7 +1149,7 @@ function renderTargets(active) {
 
   if (!active?.isHuman) {
     targetLabelEl.textContent = "Выбор";
-    targetsEl.append(emptyNote("бот думает"));
+    targetsEl.append(emptyNote(onlineMode ? "ждём ход" : "бот думает"));
     return;
   }
 
@@ -696,9 +1172,9 @@ function renderTargets(active) {
         item.id === "hammer" ? `Ударить ${player.name}` : `Украсть у ${player.name}`,
       );
       button.addEventListener("click", () => {
-        game.useItem(pendingItem, player.id);
+        usePlayerItem(pendingItem, player.id);
         pendingItem = null;
-        syncAll();
+        if (!onlineMode) syncAll();
       });
       targetsEl.append(button);
     }
@@ -725,7 +1201,7 @@ function renderTargets(active) {
   const selfButton = document.createElement("button");
   selfButton.type = "button";
   selfButton.className = "target-button danger";
-  selfButton.disabled = isShotInputLocked();
+  selfButton.disabled = isShotInputLocked() || isOnlineActionLocked();
   decorateTargetButton(selfButton, active, "В себя");
   selfButton.addEventListener("click", () => {
     performHumanShot(active.id);
@@ -736,7 +1212,7 @@ function renderTargets(active) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "target-button primary";
-    button.disabled = isShotInputLocked();
+    button.disabled = isShotInputLocked() || isOnlineActionLocked();
     decorateTargetButton(button, player, shortTargetName(player));
     button.setAttribute("aria-label", `Выстрелить в ${player.name}`);
     button.addEventListener("click", () => {
@@ -779,7 +1255,7 @@ function renderTurnHint(active) {
     return;
   }
   if (!active.isHuman) {
-    turnHintEl.textContent = `${active.name} выбирает ход...`;
+    turnHintEl.textContent = onlineMode ? `${active.name} принимает решение...` : `${active.name} выбирает ход...`;
     return;
   }
   if (pendingItem) {
@@ -807,6 +1283,8 @@ function renderTurnHint(active) {
 
 function showEventToast(message, tone = "neutral") {
   if (!eventToastEl || !message) return;
+  toastGeneration += 1;
+  const generation = toastGeneration;
   clearTimeout(eventToastTimer);
   eventToastEl.hidden = false;
   eventToastEl.textContent = message;
@@ -816,12 +1294,17 @@ function showEventToast(message, tone = "neutral") {
   eventToastTimer = setTimeout(() => {
     eventToastEl.classList.remove("is-visible");
     window.setTimeout(() => {
+      if (generation !== toastGeneration) return;
       eventToastEl.hidden = true;
     }, 180);
   }, 2800);
 }
 
 function shortTargetName(player) {
+  if (onlineMode) {
+    const firstName = player.name.trim().split(/\s+/)[0];
+    return firstName.length > 10 ? `${firstName.slice(0, 9)}…` : firstName;
+  }
   return {
     p1: "Прораб",
     p2: "Джим",
@@ -921,6 +1404,7 @@ function numberOrZero(value) {
 }
 
 function maybeAwardMatch() {
+  if (onlineMode) return;
   const { winnerId, matchId, completedAt, playerCount } = game.state;
   if (!winnerId || !matchId || !completedAt) return;
 
@@ -975,6 +1459,28 @@ function maybeAwardMatch() {
 function maybeRecordStatsMatch() {
   const { winnerId, matchId, weaponSkin } = game.state;
   if (!winnerId || !matchId) return;
+  if (onlineMode) {
+    const localPlayerId = getLocalPlayerId();
+    const winner = game.state.players.find((player) => player.id === winnerId);
+    const won = winnerId === localPlayerId;
+    const base = game.state.playerCount === 4 ? 220 : 120;
+    const currentStreak = rouletteStats.snapshot().currentStreak;
+    const nextStreak = won ? currentStreak + 1 : 0;
+    const streakBonus = won ? (nextStreak - 1) * (game.state.playerCount === 4 ? 90 : 50) : 0;
+    const score = won ? base + (winner?.hp ?? 0) * 15 + streakBonus : 0;
+    const recorded = rouletteStats.recordMatchResult({
+      matchId,
+      winnerId,
+      playerId: localPlayerId,
+      weaponSkin,
+      score,
+    });
+    if (recorded && won) {
+      const stats = rouletteStats.snapshot();
+      lastOnlineAward = { matchId, score, streak: stats.currentStreak };
+    }
+    return;
+  }
   const award = leaderboard.history.find((entry) => entry.matchId === matchId);
   rouletteStats.recordMatchResult({
     matchId,
@@ -1059,6 +1565,7 @@ function openTutorial(index) {
     }),
   );
   tutorialEl.hidden = false;
+  tutorialNextButton.focus({ preventScroll: true });
 }
 
 function closeTutorial() {
@@ -1068,8 +1575,34 @@ function closeTutorial() {
   } catch {
     // The tutorial can still close when embedded storage is unavailable.
   }
-  if (roundIntro.pending) {
+  if (matchCinematic.pending) {
+    startMatchCinematicPlayback();
+  } else if (roundIntro.pending) {
     startRoundIntroPlayback();
+  }
+  if (tutorialOpenButton.offsetParent !== null) tutorialOpenButton.focus({ preventScroll: true });
+}
+
+function activeModalPanel() {
+  return [modePanelEl, statsPanelEl, onlinePanelEl, tutorialEl, resultPanelEl]
+    .find((panel) => panel && !panel.hidden) ?? null;
+}
+
+function trapModalFocus(event, panel) {
+  const focusable = [...panel.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex='-1'])")]
+    .filter((element) => element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (!panel.contains(document.activeElement)) {
+    event.preventDefault();
+    first.focus();
+  } else if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
   }
 }
 
@@ -1108,18 +1641,21 @@ function showMatchResult() {
   const winner = state.players.find((player) => player.id === state.winnerId);
   if (!winner) return;
 
-  const humanWon = winner.id === "p0";
+  const humanWon = winner.id === getLocalPlayerId();
   const winnerIndex = Math.max(0, Number(winner.id.slice(1)) || 0);
-  const award = leaderboard.history.find((entry) => entry.matchId === state.matchId);
-  const humanRecord = leaderboard.records.p0;
+  const award = onlineMode ? lastOnlineAward : leaderboard.history.find((entry) => entry.matchId === state.matchId);
+  const localStats = rouletteStats.snapshot();
+  const humanRecord = onlineMode
+    ? { totalScore: localStats.totalScore, currentStreak: localStats.currentStreak }
+    : leaderboard.records.p0;
   resultCardEl.classList.toggle("is-victory", humanWon);
   resultCardEl.classList.toggle("is-defeat", !humanWon);
-  resultCharacterEl.src = humanWon ? ART.p0Victory : ART[CHARACTER_KEYS[winnerIndex]];
+  resultCharacterEl.src = humanWon && winnerIndex === 0 ? ART.p0Victory : ART[CHARACTER_KEYS[winnerIndex]];
   resultCharacterEl.alt = winner.name;
   resultKickerEl.textContent = humanWon ? "Победа" : "Поражение";
   resultTitleEl.textContent = humanWon ? "Стол твой" : `${winner.name} выстоял`;
   resultSubtitleEl.textContent = humanWon
-    ? "Последний соперник выбит. Награда уже в твоем рейтинге."
+    ? onlineMode ? "Ты пережил живой стол. Победа записана в твою статистику." : "Последний соперник выбит. Награда уже в твоем рейтинге."
     : "Твоя серия прервана. Следующий матч начинается с чистого барабана.";
 
   resultMetricsEl.replaceChildren(
@@ -1130,6 +1666,8 @@ function showMatchResult() {
 
   resultPanelEl.hidden = false;
   appShellEl.dataset.resultOpen = "true";
+  resultReplayButton.textContent = onlineMode ? (onlineRoom?.isHost ? "Собрать реванш" : "Ждать реванш") : "Реванш";
+  resultReplayButton.disabled = onlineMode && !onlineRoom?.isHost;
   resultReplayButton.focus({ preventScroll: true });
 
   const origin = playerEffectPoint(winner.id, "head") ?? { x: viewport.width / 2, y: viewport.height / 2 };
@@ -1236,9 +1774,29 @@ function flushActiveStats() {
   if (!statsPanelEl.hidden) renderStatsPanel();
 }
 
+function startDrawLoop() {
+  if (drawFrameId !== null || document.visibilityState === "hidden") return;
+  drawFrameId = requestAnimationFrame(draw);
+}
+
+function stopDrawLoop() {
+  if (drawFrameId !== null) cancelAnimationFrame(drawFrameId);
+  drawFrameId = null;
+}
+
 function draw(now = 0) {
-  requestAnimationFrame(draw);
-  if (!images.background || !images.p0 || !images.revolver) return;
+  drawFrameId = null;
+  if (document.visibilityState === "hidden") return;
+  const frameInterval = getLayoutMode() === "desktop" ? 1000 / 60 : 1000 / 30;
+  if (now - lastDrawAt < frameInterval) {
+    drawFrameId = requestAnimationFrame(draw);
+    return;
+  }
+  lastDrawAt = now;
+  if (!images.background || !images.p0 || !images.revolver) {
+    drawFrameId = requestAnimationFrame(draw);
+    return;
+  }
 
   ctx.clearRect(0, 0, viewport.width, viewport.height);
   ctx.save();
@@ -1247,13 +1805,17 @@ function draw(now = 0) {
   drawBackground(now);
   drawTableVignette(now);
   drawFarPlayers(now);
-  drawTableProps(now);
+  if (!matchCinematic.active) drawTableProps(now);
   drawNearPlayers(now);
   drawParticles(now);
   drawImpact(now);
-  drawSceneLabels(now);
-  drawRoundIntro(now);
+  if (!matchCinematic.active) {
+    drawSceneLabels(now);
+    drawRoundIntro(now);
+  }
+  drawMatchCinematic(now);
   ctx.restore();
+  drawFrameId = requestAnimationFrame(draw);
 }
 
 function drawBackground(now) {
@@ -1868,7 +2430,7 @@ function drawPlayer(player, now) {
   if (!seat || !image) return;
 
   const pos = projectSeat(player, seat);
-  const responsive = getWorldObjectScale();
+  const responsive = getPlayerResponsiveScale(player);
   const scale = seat.scale * bgFrame.scale * responsive;
   const width = image.naturalWidth * scale;
   const height = image.naturalHeight * scale;
@@ -2387,11 +2949,18 @@ function drawCharges(now) {
   const progress = clamp(loadingAge / ROUND_LOAD_MS, 0, 1);
   const charges = getRoundIntroCharges();
   const bounds = getHudSceneBounds();
+  const mode = getLayoutMode();
   const centerX = (bounds.left + bounds.right) / 2;
   const centerY = (bounds.top + bounds.bottom) / 2;
   const spread = Math.min(330, (bounds.right - bounds.left) * 0.56);
   const target = project(tableSlots.weapon);
-  const targetHeight = getLayoutMode() === "desktop" ? 92 : 58;
+  const targetHeight = mode === "desktop"
+    ? 92
+    : mode === "portrait"
+      ? clamp((bounds.right - bounds.left) / (Math.max(4, charges.length) * 1.55), 30, 46)
+      : 52;
+  const sourceWave = mode === "portrait" ? 18 : 28;
+  const arcHeight = mode === "portrait" ? 66 : 90;
 
   charges.forEach((kind, index) => {
     const image = images[kind];
@@ -2401,11 +2970,11 @@ function drawCharges(now) {
     const shuffledIndex = (index * 3 + 1) % charges.length;
     const source = {
       x: centerX - spread / 2 + (spread * shuffledIndex) / Math.max(1, charges.length - 1),
-      y: centerY + Math.sin(index * 1.9) * 28,
+      y: centerY + Math.sin(index * 1.9) * sourceWave,
     };
     const control = {
       x: centerX + Math.cos(index * 2.1) * spread * 0.22,
-      y: centerY - 90 - (index % 3) * 18,
+      y: centerY - arcHeight - (index % 3) * (mode === "portrait" ? 12 : 18),
     };
     const point = quadraticPoint(source, control, target, easeInOut(local));
     const alpha = local < 0.62 ? 1 : 1 - (local - 0.62) / 0.38;
@@ -2454,13 +3023,15 @@ function drawRoundIntro(now) {
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#f3b84d";
     ctx.font = `800 ${mode === "desktop" ? 15 : 12}px Inter, system-ui, sans-serif`;
-    ctx.fillText(`РАУНД ${roundIntro.roundNumber}`, centerX, centerY - (mode === "portrait" ? 116 : 154));
+    const roundOffset = mode === "portrait" ? 116 : mode === "landscape" ? 108 : 154;
+    const titleOffset = mode === "portrait" ? 86 : mode === "landscape" ? 78 : 120;
+    ctx.fillText(`РАУНД ${roundIntro.roundNumber}`, centerX, centerY - roundOffset);
     ctx.fillStyle = "#fff5df";
     ctx.font = `900 ${mode === "desktop" ? 30 : 22}px Inter, system-ui, sans-serif`;
-    ctx.fillText("СОСТАВ ЗАРЯДОВ", centerX, centerY - (mode === "portrait" ? 86 : 120));
+    ctx.fillText("СОСТАВ ЗАРЯДОВ", centerX, centerY - titleOffset);
 
-    const targetHeight = mode === "desktop" ? 150 : mode === "landscape" ? 104 : 108;
-    const gap = mode === "desktop" ? 144 : mode === "landscape" ? 104 : 78;
+    const targetHeight = mode === "desktop" ? 150 : mode === "landscape" ? 94 : 108;
+    const gap = mode === "desktop" ? 144 : mode === "landscape" ? 92 : 78;
     const pop = 0.78 + (1 - Math.pow(1 - progress, 3)) * 0.22;
     drawChargeCloseup("live", centerX - gap, centerY + 4, targetHeight, roundIntro.live, "БОЕВЫЕ", pop);
     drawChargeCloseup("blank", centerX + gap, centerY + 4, targetHeight, roundIntro.blank, "ПУСТЫЕ", pop);
@@ -2485,6 +3056,174 @@ function drawRoundIntro(now) {
   ctx.font = `700 ${mode === "desktop" ? 13 : 11}px Inter, system-ui, sans-serif`;
   const weapon = WEAPON_SKINS[roundIntro.weaponSkin];
   ctx.fillText(`${weapon.name.toUpperCase()} • ${weapon.damage} УРОН`, centerX, bounds.top + (mode === "portrait" ? 57 : 72));
+  ctx.restore();
+}
+
+function drawMatchCinematic(now) {
+  if (!matchCinematic.active) return;
+  const age = now - matchCinematic.startedAt;
+  if (age >= MATCH_CINEMATIC_MS) {
+    finishMatchCinematic();
+    return;
+  }
+
+  const bounds = getHudSceneBounds();
+  const width = bounds.right - bounds.left;
+  const height = bounds.bottom - bounds.top;
+  const centerX = (bounds.left + bounds.right) / 2;
+  const centerY = (bounds.top + bounds.bottom) / 2;
+  const finalFade = clamp((MATCH_CINEMATIC_MS - age) / 720, 0, 1);
+  const openingFade = easeInOut(clamp(age / 520, 0, 1));
+  const darkness = (0.94 - openingFade * 0.27) * finalFade;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(2, 2, 3, ${darkness})`;
+  ctx.fillRect(0, 0, viewport.width, viewport.height);
+
+  const sweepProgress = easeInOut(clamp((age - 280) / 1900, 0, 1));
+  const sweepX = bounds.left + width * (0.08 + sweepProgress * 0.84);
+  const sweepY = bounds.top + height * (0.34 + Math.sin(age * 0.0014) * 0.08);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = finalFade * (0.42 + openingFade * 0.22);
+  const sweepRadius = Math.max(width, height) * 0.48;
+  const sweep = ctx.createRadialGradient(sweepX, sweepY, 0, sweepX, sweepY, sweepRadius);
+  sweep.addColorStop(0, "rgba(255, 226, 156, 0.54)");
+  sweep.addColorStop(0.18, "rgba(243, 184, 77, 0.19)");
+  sweep.addColorStop(0.58, "rgba(112, 64, 42, 0.04)");
+  sweep.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = sweep;
+  ctx.fillRect(bounds.left, bounds.top, width, height);
+
+  game.state.players.forEach((player, index) => {
+    const point = playerEffectPoint(player.id, "chest");
+    if (!point) return;
+    const reveal = easeInOut(clamp((age - 720 - index * 180) / 480, 0, 1));
+    if (reveal <= 0) return;
+    const radius = clamp(Math.min(width, height) * 0.25, 78, 240);
+    const glow = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
+    glow.addColorStop(0, `rgba(255, 234, 184, ${0.42 * reveal})`);
+    glow.addColorStop(0.26, `rgba(243, 184, 77, ${0.16 * reveal})`);
+    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(point.x - radius, point.y - radius, radius * 2, radius * 2);
+  });
+  ctx.restore();
+
+  drawCinematicWeapon(age, centerX, centerY, width, height, finalFade);
+  drawCinematicSparks(age, centerX, centerY, width, height);
+
+  const barsProgress = finalFade * easeInOut(clamp(age / 360, 0, 1));
+  const barHeight = Math.min(54, viewport.height * 0.075) * barsProgress;
+  ctx.fillStyle = "rgba(2, 2, 3, 0.98)";
+  ctx.fillRect(0, 0, viewport.width, barHeight);
+  ctx.fillRect(0, viewport.height - barHeight, viewport.width, barHeight);
+
+  const flashT = clamp((age - 4080) / 520, 0, 1);
+  if (flashT > 0 && flashT < 1) {
+    const power = Math.sin(flashT * Math.PI);
+    ctx.globalCompositeOperation = "screen";
+    const flashRadius = Math.max(width, height) * (0.18 + flashT * 0.48);
+    const flash = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, flashRadius);
+    flash.addColorStop(0, `rgba(255, 248, 219, ${0.72 * power})`);
+    flash.addColorStop(0.22, `rgba(243, 184, 77, ${0.38 * power})`);
+    flash.addColorStop(1, "rgba(243, 184, 77, 0)");
+    ctx.fillStyle = flash;
+    ctx.fillRect(bounds.left, bounds.top, width, height);
+  }
+  ctx.restore();
+}
+
+function drawCinematicWeapon(age, centerX, centerY, sceneWidth, sceneHeight, finalFade) {
+  const image = images[game.state.weaponSkin];
+  if (!image || age < 1780) return;
+  const reveal = easeInOut(clamp((age - 1780) / 760, 0, 1));
+  const settle = easeInOut(clamp((age - 3660) / 560, 0, 1));
+  const fade = clamp((4720 - age) / 360, 0, 1) * finalFade;
+  const maxWidth = game.state.weaponSkin === "shotgun" ? 620 : 430;
+  const targetWidth = Math.min(sceneWidth * 0.58, sceneHeight * 0.72, maxWidth);
+  const weaponWidth = targetWidth * (0.58 + reveal * 0.42) * (1 - settle * 0.08);
+  const weaponHeight = image.naturalHeight * (weaponWidth / image.naturalWidth);
+  const float = prefersReducedMotion ? 0 : Math.sin(age * 0.0042) * 9 * (1 - settle);
+  const drop = settle * Math.min(46, sceneHeight * 0.08);
+  const startRotation = prefersReducedMotion ? -0.12 : -1.26;
+  const rotation = startRotation
+    + reveal * (-startRotation - 0.12)
+    + (prefersReducedMotion ? 0 : Math.sin(age * 0.0028) * 0.035 * (1 - settle));
+  const weaponY = centerY - sceneHeight * 0.03 + float + drop;
+
+  ctx.save();
+  ctx.globalAlpha = reveal * fade;
+  ctx.globalCompositeOperation = "screen";
+  const haloRadius = weaponWidth * 0.86;
+  const halo = ctx.createRadialGradient(centerX, weaponY, 0, centerX, weaponY, haloRadius);
+  halo.addColorStop(0, "rgba(255, 226, 156, 0.34)");
+  halo.addColorStop(0.42, "rgba(243, 184, 77, 0.12)");
+  halo.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(centerX - haloRadius, weaponY - haloRadius, haloRadius * 2, haloRadius * 2);
+  ctx.restore();
+
+  if (age > 2320 && age < 4080) {
+    drawCinematicCharges(age, centerX, weaponY, weaponWidth, weaponHeight, fade);
+  }
+
+  ctx.save();
+  ctx.globalAlpha = reveal * fade;
+  ctx.translate(centerX, weaponY);
+  ctx.rotate(rotation);
+  ctx.shadowColor = "rgba(255, 209, 112, 0.74)";
+  ctx.shadowBlur = Math.max(18, weaponWidth * 0.08);
+  ctx.filter = "saturate(1.12) contrast(1.06) drop-shadow(0 22px 20px rgba(0, 0, 0, 0.62))";
+  ctx.drawImage(image, -weaponWidth / 2, -weaponHeight / 2, weaponWidth, weaponHeight);
+  ctx.restore();
+}
+
+function drawCinematicCharges(age, centerX, centerY, weaponWidth, weaponHeight, fade) {
+  const orbitT = clamp((age - 2320) / 1680, 0, 1);
+  const orbitRadiusX = weaponWidth * 0.66;
+  const orbitRadiusY = Math.max(weaponHeight * 0.74, weaponWidth * 0.19);
+  const chargeKinds = ["live", "blank", "live"];
+  chargeKinds.forEach((kind, index) => {
+    const image = images[kind];
+    if (!image) return;
+    const baseAngle = -Math.PI * 0.72 + index * Math.PI * 0.72;
+    const angle = baseAngle + (prefersReducedMotion ? 0 : orbitT * Math.PI * 1.45);
+    const x = centerX + Math.cos(angle) * orbitRadiusX;
+    const y = centerY + Math.sin(angle) * orbitRadiusY;
+    const chargeHeight = clamp(weaponHeight * 0.56, 46, 112);
+    const chargeWidth = image.naturalWidth * (chargeHeight / image.naturalHeight);
+    ctx.save();
+    ctx.globalAlpha = Math.sin(orbitT * Math.PI) * fade * 0.96;
+    ctx.translate(x, y);
+    ctx.rotate(angle + Math.PI / 2 + (prefersReducedMotion ? 0 : orbitT * Math.PI * 2));
+    ctx.filter = "drop-shadow(0 9px 8px rgba(0, 0, 0, 0.58)) saturate(1.1)";
+    ctx.drawImage(image, -chargeWidth / 2, -chargeHeight / 2, chargeWidth, chargeHeight);
+    ctx.restore();
+  });
+}
+
+function drawCinematicSparks(age, centerX, centerY, sceneWidth, sceneHeight) {
+  const t = clamp((age - 4070) / 720, 0, 1);
+  if (t <= 0 || t >= 1) return;
+  const power = 1 - t;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  for (let index = 0; index < 18; index += 1) {
+    const angle = -Math.PI * 0.88 + (index / 17) * Math.PI * 1.76;
+    const distance = (36 + index % 4 * 13) + t * Math.min(sceneWidth, sceneHeight) * (0.24 + (index % 5) * 0.025);
+    const x = centerX + Math.cos(angle) * distance;
+    const y = centerY + Math.sin(angle) * distance * 0.68;
+    const length = 9 + (index % 4) * 4;
+    ctx.strokeStyle = index % 3 === 0
+      ? `rgba(255, 245, 223, ${power})`
+      : `rgba(243, 184, 77, ${power * 0.92})`;
+    ctx.lineWidth = 2 + (index % 2);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - Math.cos(angle) * length, y - Math.sin(angle) * length);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -3359,7 +4098,7 @@ function drawSceneLabels(now) {
   if (!seat) return;
 
   const pos = projectSeat(active, seat);
-  const responsive = getWorldObjectScale();
+  const responsive = getPlayerResponsiveScale(active);
   const bounds = getHudSceneBounds();
   let y = pos.y + seat.nameY * bgFrame.scale * responsive;
   if (active.id === "p0") {
@@ -3412,12 +4151,25 @@ function projectSeat(player, seat) {
   const scoreboardRight = scoreboardEl?.getBoundingClientRect().right ?? 0;
   const compact = mode !== "desktop";
   const xPad = mode === "portrait" ? 24 : 30;
-  const leftGuard = mode === "landscape" ? Math.max(scoreboardRight + 24, bounds.left) : Math.max(bounds.left, xPad);
-  const rightGuard = Math.min(bounds.right, viewport.width - xPad);
-  const topGuard = bounds.top + (compact ? 18 : 34);
+  let leftGuard = mode === "landscape" ? Math.max(scoreboardRight + 24, bounds.left) : Math.max(bounds.left, xPad);
+  let rightGuard = Math.min(bounds.right, viewport.width - xPad);
+  let topGuard = bounds.top + (compact ? 18 : 34);
   const bottomGuard = bounds.bottom - (compact ? 14 : 26);
   let x = projected.x;
   let y = projected.y;
+
+  const image = images[CHARACTER_KEYS[Number(player.id.slice(1))]];
+  if (image) {
+    const scale = seat.scale * bgFrame.scale * getPlayerResponsiveScale(player);
+    if (seat.layer < 4) {
+      topGuard = Math.max(topGuard, bounds.top + image.naturalHeight * scale * 0.92);
+    }
+    if (mode === "portrait") {
+      const halfWidth = Math.min(image.naturalWidth * scale * 0.46, (bounds.right - bounds.left) * 0.22);
+      leftGuard = Math.max(leftGuard, bounds.left + halfWidth);
+      rightGuard = Math.min(rightGuard, bounds.right - halfWidth);
+    }
+  }
 
   if (mode === "desktop" && player.id === "p3") {
     x = Math.max(x, scoreboardRight + 66);
@@ -3467,6 +4219,18 @@ function getWorldObjectScale() {
   return 1;
 }
 
+function getPlayerResponsiveScale(player) {
+  const base = getWorldObjectScale();
+  if (
+    getLayoutMode() === "portrait"
+    && game.state.playerCount === 4
+    && (player?.id === "p1" || player?.id === "p3")
+  ) {
+    return base * 0.78;
+  }
+  return base;
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -3489,7 +4253,7 @@ function playerEffectPoint(playerId, part = "chest") {
   if (!player || !seat || !image) return null;
 
   const pos = projectSeat(player, seat);
-  const responsive = getWorldObjectScale();
+  const responsive = getPlayerResponsiveScale(player);
   const scale = seat.scale * bgFrame.scale * responsive;
   const width = image.naturalWidth * scale;
   const height = image.naturalHeight * scale;
@@ -3519,7 +4283,15 @@ function queueAnimationForLastEvent() {
     return;
   }
   lastAnimatedRevision = game.state.revision;
-  rouletteStats.recordEvent(event);
+  const playerId = getLocalPlayerId();
+  const eventId = `${game.state.matchId}:${event.revision ?? game.state.revision}`;
+  rouletteStats.recordEvent(event, { playerId, eventId });
+  if (event.nextRound) {
+    rouletteStats.recordEvent(event.nextRound, {
+      playerId,
+      eventId: `${game.state.matchId}:${event.nextRound.revision ?? game.state.revision}:round`,
+    });
+  }
   if (!statsPanelEl.hidden) renderStatsPanel();
   if (event.type === "shot" || event.type === "item" || event.type === "round-start") {
     const startedAt = performance.now();
@@ -3533,19 +4305,37 @@ function queueAnimationForLastEvent() {
     spawnParticles(event);
     spawnVisualBursts(event);
     if (event.type === "shot") {
-      const eventMessage = game.state.log[0];
+      const eventMessage = event.message ?? game.state.log[0];
+      const generation = animationGeneration;
       window.setTimeout(() => {
+        if (generation !== animationGeneration) return;
         playSfx(event);
         triggerHaptic(event);
       }, SHOT_AIM_MS);
       if (event.shell === "live") {
-        window.setTimeout(() => playHitImpact(event), SHOT_AIM_MS + SHOT_FLIGHT_MS);
+        window.setTimeout(() => {
+          if (generation !== animationGeneration) return;
+          playHitImpact(event);
+        }, SHOT_AIM_MS + SHOT_FLIGHT_MS);
       }
       window.setTimeout(
-        () => showEventToast(eventMessage, event.gameOver ? "success" : event.shell === "live" ? "danger" : "neutral"),
+        () => {
+          if (generation !== animationGeneration) return;
+          showEventToast(eventMessage, event.gameOver ? "success" : event.shell === "live" ? "danger" : "neutral");
+        },
         SHOT_AIM_MS + (event.shell === "live" ? SHOT_FLIGHT_MS : 0),
       );
       scheduleMatchResult(event);
+      if (event.nextRound && !event.gameOver) {
+        const nextRoundDelay = SHOT_AIM_MS
+          + (event.shell === "live" ? SHOT_FLIGHT_MS : 0)
+          + SHOT_RECOVERY_MS;
+        const matchId = game.state.matchId;
+        window.setTimeout(() => {
+          if (generation !== animationGeneration || game.state.matchId !== matchId || game.state.winnerId) return;
+          beginRoundIntro(event.nextRound, performance.now(), event.nextRound.message);
+        }, nextRoundDelay);
+      }
     } else {
       playSfx(event);
       announceEvent(event);
@@ -3556,7 +4346,7 @@ function queueAnimationForLastEvent() {
 function beginRoundIntro(event, startedAt, message) {
   roundIntro.sequence += 1;
   roundIntro.active = false;
-  roundIntro.pending = !tutorialEl.hidden;
+  roundIntro.pending = !tutorialEl.hidden || matchCinematic.active || matchCinematic.pending;
   roundIntro.roundNumber = game.state.roundNumber;
   roundIntro.live = event.live ?? game.state.shellCounts.live;
   roundIntro.blank = event.blank ?? game.state.shellCounts.blank;
@@ -3565,6 +4355,86 @@ function beginRoundIntro(event, startedAt, message) {
   roundIntro.message = message;
   if (!roundIntro.pending) {
     startRoundIntroPlayback(startedAt);
+  }
+}
+
+function prepareMatchCinematic({ defer = false } = {}) {
+  matchCinematic.sequence += 1;
+  matchCinematic.active = false;
+  matchCinematic.pending = true;
+  matchCinematic.startedAt = 0;
+  particles.length = 0;
+  visualBursts.length = 0;
+  playerAnims.clear();
+  impact.event = null;
+  appShellEl.dataset.cinematic = "false";
+  if (!defer && tutorialEl.hidden) {
+    startMatchCinematicPlayback();
+  }
+}
+
+function startMatchCinematicPlayback(startedAt = performance.now()) {
+  if (!matchCinematic.pending || !tutorialEl.hidden) return;
+  const sequence = matchCinematic.sequence;
+  matchCinematic.active = true;
+  matchCinematic.pending = false;
+  matchCinematic.startedAt = startedAt;
+  roundIntro.active = false;
+  appShellEl.dataset.cinematic = "true";
+  lockInputFor(MATCH_CINEMATIC_MS);
+  playCinematicCue("open");
+  scheduleCinematicCue(sequence, 900, "seats");
+  scheduleCinematicCue(sequence, 2280, "weapon");
+  scheduleCinematicCue(sequence, 4120, "slam");
+}
+
+function scheduleCinematicCue(sequence, delay, cue) {
+  window.setTimeout(() => {
+    if (!matchCinematic.active || matchCinematic.sequence !== sequence) return;
+    playCinematicCue(cue);
+  }, delay);
+}
+
+function playCinematicCue(cue) {
+  if (!audioCtx || audioCtx.state !== "running") return;
+  if (cue === "open") {
+    playTone(54, 0.72, "sine", 0.052, 0, 34);
+    sweptNoise(0.86, 0.018, 180, 920, 0.05, "bandpass");
+  } else if (cue === "seats") {
+    playTone(92, 0.42, "triangle", 0.036, 0, 148);
+    playTone(184, 0.18, "sine", 0.018, 0.16, 236);
+  } else if (cue === "weapon") {
+    playRatchet(0);
+    playTone(132, 0.34, "triangle", 0.036, 0.12, 78);
+    sweptNoise(0.62, 0.022, 480, 2100, 0.04, "bandpass");
+  } else if (cue === "slam") {
+    playTableThump(0, 0.13);
+    noiseBurst(0.18, 0.11, 540, 0.006, "bandpass", 0.72);
+    playSparkleRun([523, 784, 1047], 0.055, 0.018, 0.06);
+    triggerHaptic({ type: "item" });
+  }
+}
+
+function finishMatchCinematic() {
+  if (!matchCinematic.active && !matchCinematic.pending) return;
+  matchCinematic.sequence += 1;
+  matchCinematic.active = false;
+  matchCinematic.pending = false;
+  appShellEl.dataset.cinematic = "false";
+  if (roundIntro.pending) {
+    startRoundIntroPlayback();
+    return;
+  }
+  releaseInputLock();
+}
+
+function releaseInputLock() {
+  actionLockedUntil = 0;
+  clearTimeout(actionUnlockTimer);
+  const active = game.activePlayer;
+  if (active?.isHuman && !game.state.winnerId) {
+    renderItems(active);
+    renderTargets(active);
   }
 }
 
@@ -3831,6 +4701,7 @@ function spawnVisualBursts(event) {
 
 function scheduleBotTurn() {
   clearTimeout(botTimer);
+  if (onlineMode) return;
   const active = game.activePlayer;
   if (!active || active.isHuman || game.state.winnerId) {
     return;
@@ -3840,6 +4711,7 @@ function scheduleBotTurn() {
 }
 
 function runBotTurn() {
+  if (onlineMode) return;
   const active = game.activePlayer;
   if (!active || active.isHuman || game.state.winnerId) {
     return;
@@ -3925,7 +4797,7 @@ function handleSceneClick(clientX, clientY) {
     .filter(({ seat }) => seat)
     .map(({ player, seat }) => {
       const pos = projectSeat(player, seat);
-      const responsive = getWorldObjectScale();
+      const responsive = getPlayerResponsiveScale(player);
       const image = images[CHARACTER_KEYS[Number(player.id.slice(1))]];
       const scale = seat.scale * bgFrame.scale * responsive;
       const compact = getLayoutMode() !== "desktop";
@@ -3944,10 +4816,10 @@ function handleSceneClick(clientX, clientY) {
   }
 
   if (pendingItem) {
-    const result = game.useItem(pendingItem, clicked.id);
+    const result = usePlayerItem(pendingItem, clicked.id);
     if (result.ok) {
       pendingItem = null;
-      syncAll();
+      if (!onlineMode) syncAll();
     } else {
       showEventToast(result.error, "warning");
     }
@@ -3964,9 +4836,34 @@ function isShotInputLocked() {
   return performance.now() < actionLockedUntil;
 }
 
+function isOnlineActionLocked() {
+  return onlineMode && (onlineActionPending || onlineStatus !== "connected");
+}
+
+function usePlayerItem(itemId, targetId = null) {
+  if (!onlineMode) return game.useItem(itemId, targetId);
+  if (isOnlineActionLocked()) return { ok: false, error: "Ждём ответ игрового стола" };
+  const sent = onlineClient.send({ type: "action", action: "item", itemId, targetId });
+  if (!sent) return { ok: false, error: "Нет соединения с игровым столом" };
+  onlineActionPending = true;
+  renderItems(game.activePlayer);
+  renderTargets(game.activePlayer);
+  return { ok: true };
+}
+
 function performHumanShot(targetId) {
-  if (isShotInputLocked()) {
+  if (isShotInputLocked() || isOnlineActionLocked()) {
     return { ok: false, error: "Дай выстрелу закончиться" };
+  }
+
+  if (onlineMode) {
+    const sent = onlineClient.send({ type: "action", action: "shoot", targetId });
+    if (!sent) return { ok: false, error: "Нет соединения с игровым столом" };
+    onlineActionPending = true;
+    lockInputFor(SHOT_AIM_MS + SHOT_FLIGHT_MS + SHOT_RECOVERY_MS);
+    renderItems(game.activePlayer);
+    renderTargets(game.activePlayer);
+    return { ok: true };
   }
 
   const result = game.shoot(targetId);

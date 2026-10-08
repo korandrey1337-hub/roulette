@@ -3,6 +3,7 @@ export const ROULETTE_STATS_KEY = "rouletteClubStats:v1";
 const ITEM_IDS = ["hammer", "claw", "vape", "tarot"];
 const WEAPON_IDS = ["revolver", "shotgun"];
 const MATCH_HISTORY_LIMIT = 40;
+const EVENT_HISTORY_LIMIT = 120;
 
 export function createDefaultStats(now = Date.now()) {
   return {
@@ -35,6 +36,7 @@ export function createDefaultStats(now = Date.now()) {
     weaponWins: Object.fromEntries(WEAPON_IDS.map((id) => [id, 0])),
     startedMatchIds: [],
     completedMatchIds: [],
+    recordedEventIds: [],
   };
 }
 
@@ -55,6 +57,7 @@ export function normalizeStats(value, now = Date.now()) {
   base.weaponWins = normalizeCounterMap(value.weaponWins, WEAPON_IDS);
   base.startedMatchIds = normalizeMatchIds(value.startedMatchIds);
   base.completedMatchIds = normalizeMatchIds(value.completedMatchIds);
+  base.recordedEventIds = normalizeEventIds(value.recordedEventIds);
   base.bestStreak = Math.max(base.bestStreak, base.currentStreak);
   base.matchesStarted = Math.max(base.matchesStarted, base.matchesCompleted);
   return base;
@@ -109,47 +112,50 @@ export class RouletteStats {
     return true;
   }
 
-  recordEvent(event) {
+  recordEvent(event, { playerId = "p0", eventId = null } = {}) {
     if (!event || typeof event !== "object") return false;
+    const safeEventId = typeof eventId === "string" && eventId ? eventId : null;
+    if (safeEventId && this.data.recordedEventIds.includes(safeEventId)) return false;
+
+    let recorded = false;
 
     if (event.type === "round-start") {
       this.data.roundsPlayed += 1;
-      this.persist();
-      return true;
-    }
-
-    if (event.type === "item" && event.actorId === "p0" && ITEM_IDS.includes(event.itemId)) {
+      recorded = true;
+    } else if (event.type === "item" && event.actorId === playerId && ITEM_IDS.includes(event.itemId)) {
       this.data.itemsUsed += 1;
       this.data.itemUses[event.itemId] += 1;
-      this.persist();
-      return true;
-    }
+      recorded = true;
+    } else if (event.type === "shot") {
+      const humanActed = event.actorId === playerId;
+      const humanTargeted = event.targetId === playerId;
+      const damage = nonNegativeInteger(event.damage);
 
-    if (event.type !== "shot") return false;
-
-    const humanActed = event.actorId === "p0";
-    const humanTargeted = event.targetId === "p0";
-    const damage = nonNegativeInteger(event.damage);
-
-    if (humanActed) {
-      this.data.shotsFired += 1;
-      this.data[event.selfShot ? "selfShots" : "opponentShots"] += 1;
-      this.data[event.shell === "live" ? "liveShots" : "blankShots"] += 1;
-      if (!event.selfShot) {
-        this.data.damageDealt += damage;
-        if (event.eliminated) this.data.eliminations += 1;
+      if (humanActed) {
+        this.data.shotsFired += 1;
+        this.data[event.selfShot ? "selfShots" : "opponentShots"] += 1;
+        this.data[event.shell === "live" ? "liveShots" : "blankShots"] += 1;
+        if (!event.selfShot) {
+          this.data.damageDealt += damage;
+          if (event.eliminated) this.data.eliminations += 1;
+        }
       }
+
+      if (humanTargeted) this.data.damageTaken += damage;
+      recorded = humanActed || humanTargeted;
     }
 
-    if (humanTargeted) this.data.damageTaken += damage;
-    if (!humanActed && !humanTargeted) return false;
+    if (!recorded) return false;
+    if (safeEventId) {
+      this.data.recordedEventIds = rememberEvent(this.data.recordedEventIds, safeEventId);
+    }
     this.persist();
     return true;
   }
 
-  recordMatchResult({ matchId, winnerId, weaponSkin, score = 0 } = {}) {
+  recordMatchResult({ matchId, winnerId, playerId = "p0", weaponSkin, score = 0 } = {}) {
     if (!matchId || !winnerId || this.data.completedMatchIds.includes(matchId)) return false;
-    const won = winnerId === "p0";
+    const won = winnerId === playerId;
     const weapon = WEAPON_IDS.includes(weaponSkin) ? weaponSkin : "revolver";
     const safeScore = nonNegativeInteger(score);
 
@@ -184,8 +190,17 @@ function normalizeMatchIds(value) {
   return value.filter((id) => typeof id === "string" && id.length > 0).slice(0, MATCH_HISTORY_LIMIT);
 }
 
+function normalizeEventIds(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((id) => typeof id === "string" && id.length > 0).slice(0, EVENT_HISTORY_LIMIT);
+}
+
 function rememberMatch(ids, matchId) {
   return [matchId, ...ids.filter((id) => id !== matchId)].slice(0, MATCH_HISTORY_LIMIT);
+}
+
+function rememberEvent(ids, eventId) {
+  return [eventId, ...ids.filter((id) => id !== eventId)].slice(0, EVENT_HISTORY_LIMIT);
 }
 
 function nonNegativeInteger(value) {

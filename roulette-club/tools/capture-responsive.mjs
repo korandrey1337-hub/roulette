@@ -10,7 +10,7 @@ if (!width || !height || !outputPath) {
 }
 
 const target = await fetch(
-  `http://127.0.0.1:9223/json/new?${encodeURIComponent("http://127.0.0.1:5174/roulette-club/?qa=1")}`,
+  `http://127.0.0.1:9223/json/new?${encodeURIComponent("http://127.0.0.1:5174/?qa=1")}`,
   { method: "PUT" },
 ).then((response) => response.json());
 
@@ -51,8 +51,8 @@ await send("Emulation.setDeviceMetricsOverride", {
     angle: width > height ? 90 : 0,
   },
 });
-await send("Page.navigate", { url: "http://127.0.0.1:5174/roulette-club/?qa=1" });
-await new Promise((resolve) => setTimeout(resolve, 1200));
+await send("Page.navigate", { url: "http://127.0.0.1:5174/?qa=1" });
+await new Promise((resolve) => setTimeout(resolve, 3200));
 
 await send("Runtime.evaluate", {
   expression: `

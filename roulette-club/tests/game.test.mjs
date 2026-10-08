@@ -110,3 +110,15 @@ test("last surviving player wins and match completion is recorded", () => {
   assert.equal(game.state.winnerId, "p0");
   assert.ok(Number.isFinite(game.state.completedAt));
 });
+
+test("last charge keeps the shot event and carries the next-round reveal", () => {
+  const game = gameWithShells(["blank"]);
+  const previousRound = game.state.roundNumber;
+  game.shoot("p1");
+
+  assert.equal(game.state.roundNumber, previousRound + 1);
+  assert.equal(game.state.lastEvent.type, "shot");
+  assert.equal(game.state.lastEvent.shell, "blank");
+  assert.equal(game.state.lastEvent.nextRound.type, "round-start");
+  assert.ok(game.state.lastEvent.nextRound.revision > game.state.lastEvent.revision);
+});
