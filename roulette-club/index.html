@@ -6,7 +6,6 @@
     <title>Build Ways Duel Club</title>
     <link rel="stylesheet" href="./styles.css?v=20261006-2" />
     <link rel="stylesheet" href="./mobile.css?v=20261006-2" />
-    <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
   </head>
   <body>
     <main class="app-shell" data-online="false">
@@ -257,6 +256,10 @@
       playsinline
     ></audio>
 
-    <script type="module" src="./src/main.js?v=20261006-2"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="./hub-sdk.js"></script>
+    <script src="./hub-cloud.js"></script>
+    <script src="./hub-progress-config.js"></script>
+    <script type="module" src="./hub-progress-bootstrap.js"></script>
   </body>
 </html>
