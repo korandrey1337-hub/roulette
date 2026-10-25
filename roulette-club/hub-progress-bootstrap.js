@@ -1,2 +1,4 @@
 await HubCloud.init(window.HUB_PROGRESS);
-await import('./src/main.js?v=20261008-1');
+await import('./hub-events.js');
+await import('./hub-gameplay.js');
+await import('./src/main.js?v=hub-events-20261025');

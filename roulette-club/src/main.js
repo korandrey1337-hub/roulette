@@ -772,6 +772,7 @@ async function copyOnlineRoomCode() {
 }
 
 function leaveOnlineRoom() {
+  if (onlineMode && onlineRoom?.phase === "playing") window.RouletteHub?.track(game.state, getLocalPlayerId(), true, true);
   onlineClient.leave();
   onlineRoom = null;
   onlineMode = false;
@@ -853,6 +854,7 @@ function startNewMatch() {
 }
 
 function syncAll({ scheduleBots = true } = {}) {
+  window.RouletteHub?.track(game.state, onlineMode ? getLocalPlayerId() : "p0", onlineMode);
   maybeAwardMatch();
   maybeRecordStatsMatch();
   renderHud();

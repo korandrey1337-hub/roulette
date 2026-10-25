@@ -1,6 +1,6 @@
 window.HUB_PROGRESS = {
   game: 'roulette-club',
-  keys: ['rouletteClubStats:v1', 'rouletteClubLeaderboard:v1', 'rouletteClubMusicMuted:v1', 'rouletteClubTutorialSeen'],
+  keys: ['rouletteClubStats:v1', 'rouletteClubLeaderboard:v1', 'rouletteClubMusicMuted:v1', 'rouletteClubTutorialSeen', 'hub-events:roulette-club:v1'],
   score: function (keys) {
     var stats = JSON.parse(keys['rouletteClubStats:v1'] || '{}');
     var board = JSON.parse(keys['rouletteClubLeaderboard:v1'] || '{}');
