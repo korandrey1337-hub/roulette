@@ -44,7 +44,7 @@ export class OnlineClient extends EventTarget {
     socket.addEventListener("open", () => {
       if (socket !== this.socket) return;
       this.reconnectAttempts = 0;
-      this.emit("status", { status: "connected" });
+      this.emit("status", { status: this.joinRequest ? "joining" : "connected" });
       if (this.joinRequest) socket.send(JSON.stringify(this.joinRequest));
     });
 

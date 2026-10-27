@@ -37,6 +37,8 @@ test("online room synchronizes turns and keeps the chamber secret", async (conte
   assert.equal(Object.hasOwn(guestGame.room.game, "shells"), false);
   assert.equal(hostGame.room.game.players[0].isHuman, true);
   assert.equal(guestGame.room.game.players[1].isHuman, true);
+  assert.ok(hostGame.room.turnDeadline > hostGame.room.serverNow);
+  assert.ok(hostGame.room.turnDeadline - hostGame.room.serverNow <= 56_000);
 
   const room = app.rooms.get(roomCode);
   host.send({ type: "action", action: "shoot", targetId: "p1" });
@@ -45,6 +47,7 @@ test("online room synchronizes turns and keeps the chamber secret", async (conte
   room.lockUntil = 0;
   room.game.state.players[0].items = ["tarot"];
   room.game.state.shells = ["live", "blank"];
+  const turnStartedBeforeItem = room.turnStartedAt;
   host.send({ type: "action", action: "item", itemId: "tarot" });
   const hostPeek = await host.next((message) => message.type === "state" && message.room.game?.lastEvent?.itemId === "tarot");
   const guestPeek = await guest.next((message) => message.type === "state" && message.room.game?.lastEvent?.itemId === "tarot");
@@ -52,11 +55,13 @@ test("online room synchronizes turns and keeps the chamber secret", async (conte
   assert.equal(guestPeek.room.game.peekedShell, null);
   assert.equal(Object.hasOwn(guestPeek.room.game.lastEvent, "peekedShell"), false);
   assert.equal(guestPeek.room.game.log.some((entry) => entry.includes("следующий заряд")), false);
+  assert.equal(room.turnStartedAt, turnStartedBeforeItem);
 
   host.send({ type: "action", action: "shoot", targetId: "p1" });
   const afterShot = await guest.next((message) => message.type === "state" && message.room.game?.lastEvent?.type === "shot");
   assert.equal(afterShot.room.game.currentPlayerId, "p1");
   assert.equal(afterShot.room.game.players[1].hp, 3);
+  assert.equal(room.turnStartedAt, room.lockUntil);
 
   guest.send({ type: "action", action: "shoot", targetId: "p0" });
   const lockedAction = await guest.next((message) => message.type === "error");
@@ -131,6 +136,20 @@ test("malformed static URL returns 400 without stopping the server", async (cont
   assert.equal(response.status, 400);
   const health = await fetch(`${base}/health`);
   assert.equal(health.status, 200);
+});
+
+test("intro video supports mobile byte-range playback", async (context) => {
+  const app = createRouletteServer();
+  const address = await app.listen(0, "127.0.0.1");
+  context.after(() => app.close());
+
+  const response = await fetch(`http://127.0.0.1:${address.port}/assets/video/bullet-intro.mp4`, {
+    headers: { Range: "bytes=0-1023" },
+  });
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-type"), "video/mp4");
+  assert.match(response.headers.get("content-range"), /^bytes 0-1023\/\d+$/);
+  assert.equal((await response.arrayBuffer()).byteLength, 1024);
 });
 
 test("lobby seats compact after a player leaves and a smaller match can start", async (context) => {

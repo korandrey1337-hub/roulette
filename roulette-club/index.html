@@ -4,12 +4,33 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Build Ways Duel Club</title>
-    <link rel="stylesheet" href="./styles.css?v=20261006-2" />
-    <link rel="stylesheet" href="./mobile.css?v=20261006-2" />
+    <link rel="stylesheet" href="./styles.css?v=20261027-1" />
+    <link rel="stylesheet" href="./mobile.css?v=20261027-1" />
   </head>
   <body>
     <main class="app-shell" data-online="false">
       <canvas id="club-scene" aria-label="Игровой стол в клубе Build Ways Duel"></canvas>
+
+      <section id="match-intro" class="match-intro" aria-label="Заставка матча" hidden>
+        <div id="match-intro-backdrop" class="match-intro-backdrop" aria-hidden="true"></div>
+        <video
+          id="match-intro-video"
+          class="match-intro-video"
+          src="./assets/video/bullet-intro.mp4"
+          preload="auto"
+          playsinline
+          webkit-playsinline
+          disablepictureinpicture
+          controlslist="nodownload nofullscreen noplaybackrate"
+        ></video>
+        <button
+          id="match-intro-skip"
+          class="match-intro-skip"
+          type="button"
+          aria-label="Пропустить заставку"
+          title="Пропустить заставку"
+        ><span aria-hidden="true"></span></button>
+      </section>
 
       <section class="topbar" aria-label="Настройки матча">
         <div class="brand">
@@ -191,6 +212,7 @@
               <button id="online-create" type="button">Создать стол</button>
               <button id="online-join" class="ghost-button" type="button">Войти по коду</button>
             </div>
+            <p id="online-entry-status" class="online-entry-status" role="status"></p>
           </div>
 
           <div id="online-room" class="online-room" hidden>
@@ -217,6 +239,7 @@
             <p id="online-hint" class="online-hint"></p>
             <div class="online-room-actions">
               <button id="online-leave" class="ghost-button" type="button">Выйти</button>
+              <button id="online-invite" class="ghost-button" type="button">Пригласить</button>
               <button id="online-ready" class="ghost-button" type="button">Я готов</button>
               <button id="online-start" type="button">Начать матч</button>
             </div>

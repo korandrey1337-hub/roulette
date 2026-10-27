@@ -1,11 +1,16 @@
-import { ITEM_DEFS, RouletteGame, WEAPON_SKINS } from "./game.js?v=20261006-2";
-import { OnlineClient } from "./online.js?v=20261006-2";
-import { ROULETTE_STATS_KEY, RouletteStats } from "./stats.js?v=20261006-2";
+import { ITEM_DEFS, RouletteGame, WEAPON_SKINS } from "./game.js?v=20261027-1";
+import { OnlineClient } from "./online.js?v=20261027-1";
+import { ROULETTE_STATS_KEY, RouletteStats } from "./stats.js?v=20261027-1";
 
 const canvas = document.querySelector("#club-scene");
 const ctx = canvas.getContext("2d", { alpha: false });
 const backdropCanvas = document.createElement("canvas");
 const backdropCtx = backdropCanvas.getContext("2d");
+const matchIntroEl = document.querySelector("#match-intro");
+const matchIntroBackdropEl = document.querySelector("#match-intro-backdrop");
+const matchIntroVideoEl = document.querySelector("#match-intro-video");
+const matchIntroSkipButton = document.querySelector("#match-intro-skip");
+const matchIntroPosterCanvas = document.createElement("canvas");
 
 const newGameButton = document.querySelector("#new-game");
 const currentModeLabelEl = document.querySelector("#current-mode-label");
@@ -50,7 +55,9 @@ const onlineNameInput = document.querySelector("#online-name");
 const onlineCodeInput = document.querySelector("#online-code-input");
 const onlineCreateButton = document.querySelector("#online-create");
 const onlineJoinButton = document.querySelector("#online-join");
+const onlineEntryStatusEl = document.querySelector("#online-entry-status");
 const onlineCopyCodeButton = document.querySelector("#online-copy-code");
+const onlineInviteButton = document.querySelector("#online-invite");
 const onlineStatusEl = document.querySelector("#online-status");
 const onlinePlayersEl = document.querySelector("#online-players");
 const onlineModeNameEl = document.querySelector("#online-mode-name");
@@ -116,6 +123,7 @@ const ROUND_LOAD_MS = 1250;
 const ROUND_SETTLE_MS = 200;
 const ROUND_INTRO_MS = ROUND_REVEAL_MS + ROUND_LOAD_MS + ROUND_SETTLE_MS;
 const MATCH_CINEMATIC_MS = 5000;
+const MATCH_VIDEO_TIMEOUT_MS = 15_000;
 const RESULT_REVEAL_MS = SHOT_AIM_MS + SHOT_FLIGHT_MS + 900;
 const LEADERBOARD_KEY = "rouletteClubLeaderboard:v1";
 const MUSIC_MUTED_KEY = "rouletteClubMusicMuted:v1";
@@ -194,6 +202,7 @@ let onlineMode = false;
 let onlineStatus = "offline";
 let onlineActionPending = false;
 let lastOnlineAward = null;
+let onlineClockOffsetMs = 0;
 let drawFrameId = null;
 let lastDrawAt = 0;
 let resizeFrameId = null;
@@ -224,6 +233,8 @@ const matchCinematic = {
   pending: false,
   startedAt: 0,
   sequence: 0,
+  videoActive: false,
+  timeoutId: null,
 };
 
 const TUTORIAL_STEPS = [
@@ -309,12 +320,21 @@ tutorialOpenButton.addEventListener("click", () => {
 
 statsOpenButton.addEventListener("click", openStatsPanel);
 musicToggleButton.addEventListener("click", toggleBackgroundMusic);
+matchIntroSkipButton.addEventListener("click", finishMatchCinematic);
+matchIntroVideoEl.addEventListener("loadeddata", updateMatchIntroBackdrop);
+matchIntroVideoEl.addEventListener("ended", () => {
+  if (matchCinematic.active && matchCinematic.videoActive) finishMatchCinematic();
+});
+matchIntroVideoEl.addEventListener("error", () => {
+  startCanvasMatchCinematic(matchCinematic.sequence);
+});
 onlineOpenButton.addEventListener("click", openOnlinePanel);
 onlineCloseButton.addEventListener("click", closeOnlinePanel);
 onlineBackdropEl.addEventListener("click", closeOnlinePanel);
 onlineCreateButton.addEventListener("click", () => joinOnlineRoom(true));
 onlineJoinButton.addEventListener("click", () => joinOnlineRoom(false));
 onlineCopyCodeButton.addEventListener("click", copyOnlineRoomCode);
+onlineInviteButton.addEventListener("click", shareOnlineRoom);
 onlineReadyButton.addEventListener("click", toggleOnlineReady);
 onlineStartButton.addEventListener("click", () => {
   onlineClient.send({ type: onlineRoom?.phase === "finished" ? "rematch" : "start" });
@@ -324,13 +344,27 @@ onlineModeEditButton.addEventListener("click", () => openModePanel("online"));
 onlineCodeInput.addEventListener("input", () => {
   onlineCodeInput.value = onlineCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 5);
 });
+onlineNameInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") onlineCodeInput.focus();
+});
+onlineCodeInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") joinOnlineRoom(false);
+});
 onlineClient.addEventListener("state", (event) => applyOnlineRoom(event.detail));
 onlineClient.addEventListener("status", (event) => {
+  const previousStatus = onlineStatus;
   onlineStatus = event.detail.status;
+  if (["reconnecting", "joining", "error"].includes(onlineStatus)) onlineActionPending = false;
+  if (onlineMode && previousStatus !== onlineStatus) {
+    if (onlineStatus === "reconnecting") showEventToast("Связь потеряна. Возвращаем тебя за стол...", "warning");
+    else if (onlineStatus === "error") showEventToast("Не удалось связаться с игровым столом", "warning");
+  }
   renderOnlinePanel();
+  if (onlineMode) renderHud();
 });
 onlineClient.addEventListener("error", (event) => {
   onlineActionPending = false;
+  if (!onlineRoom) onlineStatus = "error";
   showOnlineError(event.detail.message);
   if (onlineMode) showEventToast(event.detail.message, "warning");
   renderOnlinePanel();
@@ -371,7 +405,8 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (event.key !== "Escape") return;
-  if (!modePanelEl.hidden) closeModePanel();
+  if (matchCinematic.active) finishMatchCinematic();
+  else if (!modePanelEl.hidden) closeModePanel();
   else if (!onlinePanelEl.hidden) closeOnlinePanel();
   else if (!statsPanelEl.hidden) closeStatsPanel();
   else if (!tutorialEl.hidden) closeTutorial();
@@ -383,13 +418,21 @@ document.addEventListener("visibilitychange", () => {
     flushActiveStats();
     activeStatsSince = null;
     backgroundMusic.pause();
+    if (matchCinematic.videoActive) matchIntroVideoEl.pause();
   } else {
     startDrawLoop();
     activeStatsSince = performance.now();
-    if (musicUnlocked && !musicMuted) startBackgroundMusic();
+    if (matchCinematic.videoActive) {
+      matchIntroVideoEl.play().catch(() => startCanvasMatchCinematic(matchCinematic.sequence));
+    } else if (musicUnlocked && !musicMuted) {
+      startBackgroundMusic();
+    }
   }
 });
 window.setInterval(flushActiveStats, 15000);
+window.setInterval(() => {
+  if (onlineMode && onlineRoom?.phase === "playing") renderTurnHint(game.activePlayer);
+}, 250);
 
 backgroundMusic.volume = MUSIC_VOLUME;
 backgroundMusic.muted = musicMuted;
@@ -633,11 +676,14 @@ function joinOnlineRoom(create) {
 
 function applyOnlineRoom(room) {
   const previousMatchId = onlineRoom?.game?.matchId;
+  const wasReconnecting = ["reconnecting", "joining", "error"].includes(onlineStatus);
   onlineRoom = room;
   onlineStatus = "connected";
+  onlineClockOffsetMs = Number.isFinite(room.serverNow) ? room.serverNow - Date.now() : 0;
   onlineActionPending = false;
   clearOnlineError();
   updateOnlineInviteUrl(room.code);
+  if (onlineMode && wasReconnecting) showEventToast("Связь восстановлена", "success");
 
   selectedGameModeId = findGameMode(room.playerCount, room.weaponSkin).id;
 
@@ -684,9 +730,20 @@ function renderOnlinePanel() {
   renderModeButton();
 
   if (!room) {
+    const busy = ["connecting", "joining", "reconnecting"].includes(onlineStatus);
+    onlineCreateButton.disabled = busy;
+    onlineJoinButton.disabled = busy;
+    onlineNameInput.disabled = busy;
+    onlineCodeInput.disabled = busy;
+    onlineEntryStatusEl.textContent = busy ? onlineStatusLabel() : "Создай новый стол или войди по коду";
     onlineStatusEl.textContent = onlineStatusLabel();
     return;
   }
+
+  onlineCreateButton.disabled = false;
+  onlineJoinButton.disabled = false;
+  onlineNameInput.disabled = false;
+  onlineCodeInput.disabled = false;
 
   onlineCopyCodeButton.textContent = room.code;
   onlineStatusEl.textContent = room.phase === "playing"
@@ -771,12 +828,36 @@ async function copyOnlineRoomCode() {
   }
 }
 
+async function shareOnlineRoom() {
+  if (!onlineRoom?.code) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", onlineRoom.code);
+  const shareData = {
+    title: "Build Ways Duel Club",
+    text: `Заходи за стол. Код комнаты: ${onlineRoom.code}`,
+    url: url.toString(),
+  };
+
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      onlineHintEl.textContent = "Приглашение готово к отправке.";
+    } else {
+      await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
+      onlineHintEl.textContent = "Ссылка приглашения скопирована.";
+    }
+  } catch (error) {
+    if (error?.name !== "AbortError") onlineHintEl.textContent = `Код комнаты: ${onlineRoom.code}`;
+  }
+}
+
 function leaveOnlineRoom() {
   if (onlineMode && onlineRoom?.phase === "playing") window.RouletteHub?.track(game.state, getLocalPlayerId(), true, true);
   onlineClient.leave();
   onlineRoom = null;
   onlineMode = false;
   onlineActionPending = false;
+  onlineClockOffsetMs = 0;
   updateOnlineInviteUrl(null);
   closeOnlinePanel();
   startNewMatch();
@@ -803,6 +884,7 @@ function clearOnlineError() {
 function onlineStatusLabel() {
   return {
     connecting: "Подключение",
+    joining: "Входим за стол",
     reconnecting: "Возвращаем связь",
     connected: "На связи",
     error: "Ошибка связи",
@@ -1249,38 +1331,51 @@ function renderRiskMeter(state) {
 function renderTurnHint(active) {
   const state = game.state;
   if (state.winnerId) {
-    turnHintEl.textContent = "Результат сохранён в таблице";
+    setTurnHint("Результат сохранён в таблице", false);
     return;
   }
   if (!active) {
-    turnHintEl.textContent = "Подготовка следующего раунда";
+    setTurnHint("Подготовка следующего раунда");
     return;
   }
   if (!active.isHuman) {
-    turnHintEl.textContent = onlineMode ? `${active.name} принимает решение...` : `${active.name} выбирает ход...`;
+    setTurnHint(onlineMode ? `${active.name} принимает решение...` : `${active.name} выбирает ход...`);
     return;
   }
   if (pendingItem) {
-    turnHintEl.textContent = `Выбери цель: ${ITEM_DEFS[pendingItem].description}`;
+    setTurnHint(`Выбери цель: ${ITEM_DEFS[pendingItem].description}`);
     return;
   }
   if (state.peekedBy === active.id && state.peekedShell) {
-    turnHintEl.textContent =
+    setTurnHint(
       state.peekedShell === "blank"
         ? "Таро: пустой. Выстрел в себя сохранит ход"
-        : "Таро: боевой. Целься в соперника";
+        : "Таро: боевой. Целься в соперника",
+    );
     return;
   }
 
   const total = state.shellCounts.live + state.shellCounts.blank;
   const risk = total ? state.shellCounts.live / total : 0;
   if (risk <= 0.35) {
-    turnHintEl.textContent = "Пустых больше: риск в себя может сохранить ход";
+    setTurnHint("Пустых больше: риск в себя может сохранить ход");
   } else if (risk >= 0.6) {
-    turnHintEl.textContent = "Боевых больше: выгоднее выбрать соперника";
+    setTurnHint("Боевых больше: выгоднее выбрать соперника");
   } else {
-    turnHintEl.textContent = "Шансы близки: предмет может решить ход";
+    setTurnHint("Шансы близки: предмет может решить ход");
   }
+}
+
+function setTurnHint(message, includeTimer = true) {
+  const seconds = includeTimer ? onlineTurnSecondsLeft() : null;
+  turnHintEl.classList.toggle("is-urgent", seconds !== null && seconds <= 10);
+  turnHintEl.textContent = seconds === null ? message : `${message} · ${seconds} сек`;
+}
+
+function onlineTurnSecondsLeft() {
+  if (!onlineMode || onlineRoom?.phase !== "playing" || !Number.isFinite(onlineRoom.turnDeadline)) return null;
+  const serverNow = Date.now() + onlineClockOffsetMs;
+  return Math.max(0, Math.ceil((onlineRoom.turnDeadline - serverNow) / 1000));
 }
 
 function showEventToast(message, tone = "neutral") {
@@ -3063,6 +3158,7 @@ function drawRoundIntro(now) {
 
 function drawMatchCinematic(now) {
   if (!matchCinematic.active) return;
+  if (matchCinematic.videoActive) return;
   const age = now - matchCinematic.startedAt;
   if (age >= MATCH_CINEMATIC_MS) {
     finishMatchCinematic();
@@ -4365,6 +4461,13 @@ function prepareMatchCinematic({ defer = false } = {}) {
   matchCinematic.active = false;
   matchCinematic.pending = true;
   matchCinematic.startedAt = 0;
+  matchCinematic.videoActive = false;
+  clearTimeout(matchCinematic.timeoutId);
+  matchCinematic.timeoutId = null;
+  matchIntroVideoEl.pause();
+  matchIntroVideoEl.currentTime = 0;
+  matchIntroVideoEl.muted = false;
+  matchIntroEl.hidden = true;
   particles.length = 0;
   visualBursts.length = 0;
   playerAnims.clear();
@@ -4383,6 +4486,75 @@ function startMatchCinematicPlayback(startedAt = performance.now()) {
   matchCinematic.startedAt = startedAt;
   roundIntro.active = false;
   appShellEl.dataset.cinematic = "true";
+  lockInputFor(MATCH_VIDEO_TIMEOUT_MS);
+  backgroundMusic.pause();
+  startMatchIntroVideo(sequence);
+}
+
+async function startMatchIntroVideo(sequence) {
+  matchCinematic.videoActive = true;
+  matchIntroEl.hidden = false;
+  matchIntroVideoEl.currentTime = 0;
+  matchIntroVideoEl.muted = false;
+
+  try {
+    await matchIntroVideoEl.play();
+  } catch {
+    matchIntroVideoEl.muted = true;
+    try {
+      await matchIntroVideoEl.play();
+    } catch {
+      startCanvasMatchCinematic(sequence);
+      return;
+    }
+  }
+
+  if (!matchCinematic.active || matchCinematic.sequence !== sequence) {
+    matchIntroVideoEl.pause();
+    return;
+  }
+
+  if (typeof matchIntroVideoEl.requestVideoFrameCallback === "function") {
+    matchIntroVideoEl.requestVideoFrameCallback(() => updateMatchIntroBackdrop());
+  }
+  window.setTimeout(() => {
+    if (matchCinematic.active && matchCinematic.sequence === sequence) updateMatchIntroBackdrop();
+  }, 180);
+
+  const durationMs = Number.isFinite(matchIntroVideoEl.duration)
+    ? Math.ceil(matchIntroVideoEl.duration * 1000) + 1000
+    : MATCH_VIDEO_TIMEOUT_MS;
+  clearTimeout(matchCinematic.timeoutId);
+  matchCinematic.timeoutId = window.setTimeout(() => {
+    if (matchCinematic.active && matchCinematic.sequence === sequence) finishMatchCinematic();
+  }, Math.min(MATCH_VIDEO_TIMEOUT_MS, Math.max(MATCH_CINEMATIC_MS, durationMs)));
+}
+
+function updateMatchIntroBackdrop() {
+  if (!matchIntroVideoEl.videoWidth || !matchIntroVideoEl.videoHeight) return;
+  matchIntroPosterCanvas.width = 192;
+  matchIntroPosterCanvas.height = Math.max(
+    108,
+    Math.round(matchIntroVideoEl.videoHeight * (192 / matchIntroVideoEl.videoWidth)),
+  );
+  const posterCtx = matchIntroPosterCanvas.getContext("2d");
+  posterCtx.drawImage(matchIntroVideoEl, 0, 0, matchIntroPosterCanvas.width, matchIntroPosterCanvas.height);
+  try {
+    matchIntroBackdropEl.style.backgroundImage = `url(${matchIntroPosterCanvas.toDataURL("image/jpeg", 0.68)})`;
+    matchIntroEl.dataset.backdrop = "true";
+  } catch {
+    matchIntroEl.dataset.backdrop = "false";
+  }
+}
+
+function startCanvasMatchCinematic(sequence) {
+  if (!matchCinematic.active || matchCinematic.sequence !== sequence || !matchCinematic.videoActive) return;
+  matchCinematic.videoActive = false;
+  matchCinematic.startedAt = performance.now();
+  matchIntroVideoEl.pause();
+  matchIntroEl.hidden = true;
+  clearTimeout(matchCinematic.timeoutId);
+  matchCinematic.timeoutId = null;
   lockInputFor(MATCH_CINEMATIC_MS);
   playCinematicCue("open");
   scheduleCinematicCue(sequence, 900, "seats");
@@ -4422,7 +4594,15 @@ function finishMatchCinematic() {
   matchCinematic.sequence += 1;
   matchCinematic.active = false;
   matchCinematic.pending = false;
+  matchCinematic.videoActive = false;
+  clearTimeout(matchCinematic.timeoutId);
+  matchCinematic.timeoutId = null;
+  matchIntroVideoEl.pause();
+  matchIntroVideoEl.currentTime = 0;
+  matchIntroVideoEl.muted = false;
+  matchIntroEl.hidden = true;
   appShellEl.dataset.cinematic = "false";
+  if (musicUnlocked && !musicMuted) startBackgroundMusic();
   if (roundIntro.pending) {
     startRoundIntroPlayback();
     return;

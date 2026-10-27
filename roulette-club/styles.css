@@ -108,6 +108,109 @@ select {
   display: block;
 }
 
+.match-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: var(--app-height);
+  overflow: hidden;
+  background: #020203;
+  isolation: isolate;
+}
+
+.match-intro[hidden] {
+  display: none;
+}
+
+.match-intro::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.52);
+}
+
+.match-intro-backdrop {
+  position: absolute;
+  inset: -32px;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  opacity: 0;
+  filter: blur(26px) brightness(0.46) saturate(0.88);
+  transform: scale(1.12);
+  transition: opacity 180ms ease;
+}
+
+.match-intro[data-backdrop="true"] .match-intro-backdrop {
+  opacity: 1;
+}
+
+.match-intro-video {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: transparent;
+}
+
+.match-intro-skip {
+  position: absolute;
+  z-index: 3;
+  top: calc(var(--tg-safe-top, 0px) + 14px);
+  right: calc(var(--tg-safe-right, 0px) + 14px);
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  border: 1px solid rgba(255, 244, 218, 0.35);
+  border-radius: 8px;
+  background: rgba(12, 8, 10, 0.68);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+}
+
+.match-intro-skip span,
+.match-intro-skip span::before,
+.match-intro-skip span::after {
+  position: absolute;
+  top: 50%;
+  display: block;
+  width: 0;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 9px solid #fff5df;
+  transform: translateY(-50%);
+}
+
+.match-intro-skip span {
+  left: 12px;
+}
+
+.match-intro-skip span::before,
+.match-intro-skip span::after {
+  content: "";
+}
+
+.match-intro-skip span::before {
+  left: 8px;
+}
+
+.match-intro-skip span::after {
+  left: 17px;
+  width: 2px;
+  height: 14px;
+  border: 0;
+  background: #fff5df;
+}
+
 .is-telegram body {
   position: fixed;
   inset: 0;
@@ -569,6 +672,15 @@ h2 {
   justify-content: flex-end;
 }
 
+.online-entry-status {
+  grid-column: 1 / -1;
+  min-height: 16px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
 .online-entry-actions button,
 .online-room-actions button {
   min-height: 38px;
@@ -759,10 +871,16 @@ h2 {
 
 .online-room-actions {
   justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 #online-leave {
   margin-right: auto;
+}
+
+.turn-hint.is-urgent {
+  color: #ffd57a;
+  font-weight: 800;
 }
 
 .online-error {

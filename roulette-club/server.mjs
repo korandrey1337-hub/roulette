@@ -26,6 +26,7 @@ const SHOT_AIM_MS = 420;
 const SHOT_FLIGHT_MS = 380;
 const SHOT_RECOVERY_MS = 360;
 const ROUND_INTRO_MS = 2_700;
+const MATCH_CINEMATIC_MS = 7_000;
 
 export function createRouletteServer({ root = ROOT } = {}) {
   const rooms = new Map();
@@ -99,16 +100,31 @@ function serveHttp(root, request, response) {
   }
 
   const fileStats = statSync(filePath);
-  response.writeHead(200, {
+  const range = parseByteRange(request.headers.range, fileStats.size);
+  if (range === null) {
+    response.writeHead(416, {
+      "content-range": `bytes */${fileStats.size}`,
+      "accept-ranges": "bytes",
+    });
+    response.end();
+    return;
+  }
+
+  const status = range ? 206 : 200;
+  const contentLength = range ? range.end - range.start + 1 : fileStats.size;
+  const headers = {
     "content-type": contentType(filePath),
-    "content-length": fileStats.size,
+    "content-length": contentLength,
     "cache-control": "no-store",
-  });
+    "accept-ranges": "bytes",
+  };
+  if (range) headers["content-range"] = `bytes ${range.start}-${range.end}/${fileStats.size}`;
+  response.writeHead(status, headers);
   if (request.method === "HEAD") {
     response.end();
     return;
   }
-  const stream = createReadStream(filePath);
+  const stream = createReadStream(filePath, range ? { start: range.start, end: range.end } : undefined);
   stream.on("error", () => {
     if (!response.headersSent) response.writeHead(500);
     response.end();
@@ -129,7 +145,31 @@ function contentType(filePath) {
     ".webp": "image/webp",
     ".svg": "image/svg+xml",
     ".mp3": "audio/mpeg",
+    ".mp4": "video/mp4",
   }[extname(filePath).toLowerCase()] ?? "application/octet-stream";
+}
+
+function parseByteRange(value, size) {
+  if (!value) return undefined;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(value).trim());
+  if (!match || (!match[1] && !match[2]) || size <= 0) return null;
+
+  let start;
+  let end;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+    start = Math.max(0, size - suffixLength);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : size - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return null;
+    end = Math.min(end, size - 1);
+  }
+
+  if (start < 0 || start >= size || end < start) return null;
+  return { start, end };
 }
 
 function isAllowedWebSocketOrigin(request) {
@@ -454,7 +494,7 @@ function startRoom(room, player) {
     gamePlayer.isHuman = false;
   }
   room.phase = "playing";
-  room.lockUntil = Date.now() + ROUND_INTRO_MS;
+  room.lockUntil = Date.now() + MATCH_CINEMATIC_MS + ROUND_INTRO_MS;
   room.turnStartedAt = room.lockUntil;
   broadcast(room);
 }
@@ -494,9 +534,9 @@ function performAction(room, player, message) {
   }
 
   const now = Date.now();
-  room.turnStartedAt = now;
   if (message.action === "shoot") {
     room.lockUntil = now + shotLockDuration(room.game.state.lastEvent);
+    room.turnStartedAt = room.lockUntil;
   }
   if (room.game.state.winnerId) room.phase = "finished";
   broadcast(room);
@@ -504,12 +544,14 @@ function performAction(room, player, message) {
 
 function buildRoomState(room, viewer) {
   return {
+    serverNow: Date.now(),
     code: room.code,
     phase: room.phase,
     selfId: viewer.id,
     isHost: room.hostId === viewer.id,
     playerCount: room.playerCount,
     weaponSkin: room.weaponSkin,
+    turnDeadline: roomTurnDeadline(room),
     canStart: room.phase === "lobby"
       && room.players.size === room.playerCount
       && [...room.players.values()].every((player) => player.connected && player.ready),
@@ -612,14 +654,13 @@ function maintainRooms(rooms) {
 
     if (room.phase === "playing" && room.game && now >= room.lockUntil) {
       const active = room.players.get(room.game.state.currentPlayerId);
-      const disconnectedTooLong = active && !active.connected && now - active.disconnectedAt > DISCONNECT_TURN_MS;
-      const connectedTooLong = active?.connected && now - room.turnStartedAt > CONNECTED_TURN_MS;
-      if (disconnectedTooLong || connectedTooLong) {
+      const turnDeadline = roomTurnDeadline(room);
+      if (active && turnDeadline && now >= turnDeadline) {
         const targets = room.game.alivePlayers().filter((candidate) => candidate.id !== active.id);
         const target = targets.sort((a, b) => a.hp - b.hp)[0] ?? room.game.activePlayer;
         room.game.shoot(target.id);
         room.lockUntil = now + shotLockDuration(room.game.state.lastEvent);
-        room.turnStartedAt = now;
+        room.turnStartedAt = room.lockUntil;
         if (room.game.state.winnerId) room.phase = "finished";
         broadcast(room);
       }
@@ -629,6 +670,14 @@ function maintainRooms(rooms) {
       rooms.delete(room.code);
     }
   }
+}
+
+function roomTurnDeadline(room) {
+  if (room.phase !== "playing" || !room.game) return null;
+  const active = room.players.get(room.game.state.currentPlayerId);
+  if (!active) return null;
+  if (!active.connected && active.disconnectedAt) return active.disconnectedAt + DISCONNECT_TURN_MS;
+  return room.turnStartedAt + CONNECTED_TURN_MS;
 }
 
 function maintainPeers(peers, rooms) {
